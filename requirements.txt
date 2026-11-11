@@ -1,0 +1,4 @@
+sqlalchemy
+psycopg[binary]
+openpyxl
+PySide6
