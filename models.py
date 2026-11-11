@@ -1,5 +1,7 @@
 # This Python file uses the following encoding: utf-8
 import os
+import hashlib
+import hmac
 
 from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Date
 from sqlalchemy.orm import declarative_base, relationship
@@ -18,12 +20,36 @@ class User(Base):
     surname = Column(String, nullable=False)
     patronymic = Column(String)
     user_login = Column(String, nullable=False)
-    user_pas = Column(String)  # в Users_import паролей нет
+    user_pas = Column(String)  # хеш пароля; в Users_import паролей нет
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
     role = relationship("Role", back_populates="users", lazy="joined")
 
     def __str__(self):
         return f'{self.surname} {self.name} {self.patronymic}'
+
+    def set_password(self, password):
+        if not password:
+            raise ValueError('Пароль не должен быть пустым')
+        salt = os.urandom(16)
+        digest = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 600000)
+        self.user_pas = f'pbkdf2_sha256$600000${salt.hex()}${digest.hex()}'
+
+    def check_password(self, password):
+        if not password or not self.user_pas:
+            return False
+        if not self.user_pas.startswith('pbkdf2_sha256$'):
+            # совместимость с существующими учебными данными
+            return hmac.compare_digest(password.encode('utf-8'), self.user_pas.encode('utf-8'))
+        try:
+            _, rounds, salt, expected = self.user_pas.split('$')
+            rounds = int(rounds)
+            salt, expected = bytes.fromhex(salt), bytes.fromhex(expected)
+            if not 1 <= rounds <= 2000000 or len(salt) != 16 or len(expected) != 32:
+                return False
+            actual = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, rounds)
+            return hmac.compare_digest(actual, expected)
+        except (ValueError, TypeError):
+            return False
 
 class Role(Base):
     __tablename__ = "roles"

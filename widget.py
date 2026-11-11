@@ -65,7 +65,9 @@ class Widget(QWidget):
 
 
 if __name__ == "__main__":
+    from login import Login
+
     app = QApplication(sys.argv)
-    widget = Widget()
-    widget.show()
+    login = Login()
+    login.show()
     sys.exit(app.exec())
