@@ -16,8 +16,8 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QComboBox, QGridLayout, QLabel,
-    QListWidget, QListWidgetItem, QSizePolicy, QSpacerItem,
-    QWidget)
+    QLineEdit, QListWidget, QListWidgetItem, QSizePolicy,
+    QSpacerItem, QVBoxLayout, QWidget)
 
 class Ui_Widget(object):
     def setupUi(self, Widget):
@@ -35,18 +35,48 @@ class Ui_Widget(object):
 
         self.gridLayout.addWidget(self.label, 0, 1, 1, 1)
 
+        self.controlsLayout = QVBoxLayout()
+        self.controlsLayout.setObjectName(u"controlsLayout")
+        self.sortLabel = QLabel(Widget)
+        self.sortLabel.setObjectName(u"sortLabel")
+
+        self.controlsLayout.addWidget(self.sortLabel)
+
         self.comboBox = QComboBox(Widget)
         self.comboBox.setObjectName(u"comboBox")
 
-        self.gridLayout.addWidget(self.comboBox, 0, 2, 1, 1)
+        self.controlsLayout.addWidget(self.comboBox)
+
+        self.searchLabel = QLabel(Widget)
+        self.searchLabel.setObjectName(u"searchLabel")
+
+        self.controlsLayout.addWidget(self.searchLabel)
+
+        self.lineEdit = QLineEdit(Widget)
+        self.lineEdit.setObjectName(u"lineEdit")
+
+        self.controlsLayout.addWidget(self.lineEdit)
+
+        self.verticalSpacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+
+        self.controlsLayout.addItem(self.verticalSpacer)
+
+
+        self.gridLayout.addLayout(self.controlsLayout, 1, 0, 1, 1)
 
         self.listWidget = QListWidget(Widget)
         self.listWidget.setObjectName(u"listWidget")
 
-        self.gridLayout.addWidget(self.listWidget, 1, 0, 1, 3)
+        self.gridLayout.addWidget(self.listWidget, 1, 1, 1, 1)
 
         self.gridLayout.setRowStretch(1, 1)
-        self.gridLayout.setColumnStretch(0, 1)
+        self.gridLayout.setColumnStretch(1, 1)
+#if QT_CONFIG(shortcut)
+        self.sortLabel.setBuddy(self.comboBox)
+        self.searchLabel.setBuddy(self.lineEdit)
+#endif // QT_CONFIG(shortcut)
+        QWidget.setTabOrder(self.comboBox, self.lineEdit)
+        QWidget.setTabOrder(self.lineEdit, self.listWidget)
 
         self.retranslateUi(Widget)
 
@@ -56,5 +86,10 @@ class Ui_Widget(object):
     def retranslateUi(self, Widget):
         Widget.setWindowTitle(QCoreApplication.translate("Widget", u"\u0427\u0443\u0434\u043e \u041e\u0431\u0443\u0432\u044c", None))
         self.label.setText(QCoreApplication.translate("Widget", u"\u041d\u0435\u0430\u0432\u0442\u043e\u0440\u0438\u0437\u043e\u0432\u0430\u043d\u043d\u044b\u0439 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c", None))
+        self.sortLabel.setText(QCoreApplication.translate("Widget", u"\u0421\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u043a\u0430", None))
+        self.searchLabel.setText(QCoreApplication.translate("Widget", u"\u041f\u043e\u0438\u0441\u043a", None))
+#if QT_CONFIG(accessibility)
+        self.lineEdit.setAccessibleName(QCoreApplication.translate("Widget", u"\u041f\u043e\u0438\u0441\u043a \u0442\u043e\u0432\u0430\u0440\u043e\u0432", None))
+#endif // QT_CONFIG(accessibility)
     # retranslateUi
 
