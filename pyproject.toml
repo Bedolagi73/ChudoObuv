@@ -1,18 +1,5 @@
 [project]
-name = "chudo-obuv"
-version = "0.1.0"
-description = "Shoe catalog built with PySide6, SQLAlchemy and PostgreSQL"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-    "sqlalchemy",
-    "psycopg[binary]",
-    "openpyxl",
-    "PySide6",
-]
-
-[tool.uv]
-package = false
+name = "PySide Widgets Project"
 
 [tool.pyside6-project]
-files = [".env.example", ".gitignore", "README.md", "form.ui", "import/Orders_import.xlsx", "import/Products_import.xlsx", "import/Sizes_import.xlsx", "import/Stock_Items_import.xlsx", "import/Users_import.xlsx", "import_data.py", "login.py", "login.ui", "models.py", "preview/form.ui", "preview/tovar.py", "preview/tovar.ui", "preview/tovar_images.png", "preview/tovar_list.png", "preview/tovar_list_content.png", "preview/tovar_style.png", "preview/tovar_v2.png", "preview/tovar_wrap_fixed.png", "preview/widget.py", "pyproject.toml", "requirements.txt", "set_password.py", "tovar.py", "tovar.ui", "ui_form.py", "widget.py"]
+files = ["form.ui", "import_data.py", "login.py", "login.ui", "models.py", "requirements.txt", "set_password.py", "tovar.py", "tovar.ui", "ui_form.py", "widget.py"]
