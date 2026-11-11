@@ -52,6 +52,8 @@
      <item>
       <widget class="QLineEdit" name="lineEdit">
        <property name="accessibleName"><string>Поиск товаров</string></property>
+       <property name="placeholderText"><string>Название или описание</string></property>
+       <property name="clearButtonEnabled"><bool>true</bool></property>
       </widget>
      </item>
      <item>

@@ -54,6 +54,7 @@ class Ui_Widget(object):
 
         self.lineEdit = QLineEdit(Widget)
         self.lineEdit.setObjectName(u"lineEdit")
+        self.lineEdit.setClearButtonEnabled(True)
 
         self.controlsLayout.addWidget(self.lineEdit)
 
@@ -91,5 +92,6 @@ class Ui_Widget(object):
 #if QT_CONFIG(accessibility)
         self.lineEdit.setAccessibleName(QCoreApplication.translate("Widget", u"\u041f\u043e\u0438\u0441\u043a \u0442\u043e\u0432\u0430\u0440\u043e\u0432", None))
 #endif // QT_CONFIG(accessibility)
+        self.lineEdit.setPlaceholderText(QCoreApplication.translate("Widget", u"\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0438\u043b\u0438 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", None))
     # retranslateUi
 
