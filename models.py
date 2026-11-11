@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Date
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Date, Float, Text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.orm import declarative_base, relationship
@@ -37,8 +37,7 @@ class User(Base):
     name = Column(String, nullable=False)
     surname = Column(String, nullable=False)
     patronymic = Column(String)
-    user_login = Column(String, nullable=False)
-    user_pas = Column(String)  # в Users_import паролей нет
+    user_login = Column('login', String, nullable=False)
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=False)
     role = relationship("Role", back_populates="users", lazy="joined")
 
@@ -48,75 +47,73 @@ class User(Base):
 class Role(Base):
     __tablename__ = "roles"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
+    title = Column('name', String, nullable=False)
     users = relationship("User", back_populates="role", lazy="joined")
 
 class Product(Base):
     __tablename__ = "products"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    cathegory_id = Column(Integer, ForeignKey("cathegories.id"), nullable=False)
-    subcathegory_id = Column(Integer, ForeignKey("subcathegories.id"), nullable=False)
+    subcathegory_id = Column('sub_cat_id', Integer, ForeignKey("sub_categories.id"), nullable=False)
     manufacturer_id = Column(Integer, ForeignKey("manufacturers.id"), nullable=False)
-    description = Column(String)
-    composition = Column(String)
-    price = Column(Integer)
-    image = Column(String)
-    cathegory = relationship("Cathegory", lazy="joined")
+    description = Column(Text, nullable=False)
+    composition = Column('content', Text, nullable=False)
+    price = Column(Float, nullable=False)
+    image = Column('image_path', String, nullable=False)
     subcathegory = relationship("Subcathegory", lazy="joined")
     manufacturer = relationship("Manufacturer", lazy="joined")
-    # остатки по размерам: строки stock (размер + количество)
+    # остатки по размерам: строки product_items (размер + количество)
     stock = relationship("Stock", lazy="selectin")
 
 class Cathegory(Base):
-    __tablename__ = "cathegories"
+    __tablename__ = "categories"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
+    title = Column('name', String, nullable=False)
     subcathegories = relationship("Subcathegory", back_populates="cathegory")
 
 class Subcathegory(Base):
-    __tablename__ = "subcathegories"
+    __tablename__ = "sub_categories"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
+    title = Column('name', String, nullable=False)
     # подкатегория принадлежит категории: «Кроссовки» детские и женские — разные строки
-    cathegory_id = Column(Integer, ForeignKey("cathegories.id"), nullable=False)
+    cathegory_id = Column('category_id', Integer, ForeignKey("categories.id"), nullable=False)
     cathegory = relationship("Cathegory", back_populates="subcathegories", lazy="joined")
 
 class Manufacturer(Base):
     __tablename__ = "manufacturers"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
+    title = Column('name', String, nullable=False)
 
 class Size(Base):
     __tablename__ = "sizes"
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
+    title = Column('name', String, nullable=False)
 
 class Stock(Base):
-    __tablename__ = "stock"
-    product_id = Column(Integer, ForeignKey("products.id"), primary_key=True, nullable=False)
-    size_id = Column(Integer, ForeignKey("sizes.id"), primary_key=True, nullable=False)
-    amount = Column(Integer)
+    __tablename__ = "product_items"
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    size_id = Column(Integer, ForeignKey("sizes.id"), nullable=False)
+    amount = Column(Integer, nullable=False)
     size = relationship("Size", lazy="joined")
 
 class Product_tovar(Base):
-    __tablename__ = "product_tovar"
-    product_id = Column(Integer, ForeignKey("products.id"), primary_key=True, nullable=False)
-    order_id = Column(Integer, ForeignKey("orders.id"), primary_key=True, nullable=False)
-    size_id = Column(Integer, ForeignKey("sizes.id"), primary_key=True, nullable=False)
-    count = Column(Integer)
-    price = Column(Integer)
+    __tablename__ = "order_items"
+    id = Column(Integer, primary_key=True, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    size_id = Column(Integer, ForeignKey("sizes.id"), nullable=False)
+    price = Column(Float, nullable=False)
     product = relationship("Product", lazy="joined")
     size = relationship("Size", lazy="joined")
 
 class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(Integer, nullable=False)
-    order_date = Column(Date, nullable=False)
+    order_date = Column('date', Date, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     user = relationship("User", lazy="joined")
-    # состав заказа: строки product_tovar (товар + размер + количество)
+    # состав заказа: строки order_items; каждая строка соответствует одной паре
     items = relationship("Product_tovar", lazy="selectin")
 
 def create():

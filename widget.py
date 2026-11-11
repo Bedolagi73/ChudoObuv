@@ -5,7 +5,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtCore import QSize
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from models import create, engine, Product, DatabaseConfigError, ENV_FILE
+from models import engine, Product, DatabaseConfigError, ENV_FILE, config_error
 from tovar import Tovar
 
 
@@ -22,8 +22,8 @@ class Widget(QWidget):
         self.ui.comboBox.currentIndexChanged.connect(self.load_tovars)
         # загружаем логотип фирмы
         self.setWindowIcon(QIcon('import/Чудо Обувь.ico'))
-        # создаем таблицы (если их ещё нет)
-        create()
+        if engine is None:
+            raise DatabaseConfigError(config_error)
 
         self.load_tovars()
 

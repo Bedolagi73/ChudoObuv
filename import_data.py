@@ -74,10 +74,10 @@ def main():
 
         products = {}
         for cat, subcat, image, name, manuf, description, composition, price in rows("Products"):
-            p = Product(name=clean(name), cathegory=ref(Cathegory, cat),
+            p = Product(name=clean(name),
                         subcathegory=subcathegory(cat, subcat),
-                        manufacturer=ref(Manufacturer, manuf), description=description,
-                        composition=composition, price=int(float(price)), image=image)
+                        manufacturer=ref(Manufacturer, manuf), description=description or '',
+                        composition=composition or '', price=float(price), image=image or '')
             db.add(p)
             products[(clean(name), clean(manuf))] = p
 
@@ -104,11 +104,13 @@ def main():
                 user = users.get(clean(fio))
                 if user is None:
                     raise ValueError(f"Заказ {code}: пользователь не найден: {fio}")
-                orders[code] = Order(code=code, order_date=to_date(date), user=user)
+                orders[code] = Order(order_date=to_date(date), user=user)
                 db.add(orders[code])
-            orders[code].items.append(Product_tovar(product=find_product(name, manuf),
-                                                    size=ref(Size, size_title(size)),
-                                                    count=int(count), price=int(float(price))))
+            # в order_items нет колонки количества: одна строка на каждую пару
+            for _ in range(int(count)):
+                orders[code].items.append(Product_tovar(product=find_product(name, manuf),
+                                                        size=ref(Size, size_title(size)),
+                                                        price=float(price)))
 
         db.commit()
 
