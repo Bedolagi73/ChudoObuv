@@ -2,3 +2,4 @@ sqlalchemy
 psycopg[binary]
 openpyxl
 PySide6
+python-dotenv

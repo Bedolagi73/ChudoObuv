@@ -1,10 +1,11 @@
 import sys
-from PySide6.QtWidgets import QApplication, QWidget, QListWidgetItem
+from PySide6.QtWidgets import QApplication, QWidget, QListWidgetItem, QMessageBox
 from ui_form import Ui_Widget
 from PySide6.QtGui import QIcon
 from PySide6.QtCore import QSize
 from sqlalchemy.orm import Session
-from models import create, engine, Product
+from sqlalchemy.exc import SQLAlchemyError
+from models import create, engine, Product, DatabaseConfigError, ENV_FILE
 from tovar import Tovar
 
 
@@ -52,6 +53,14 @@ class Widget(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    widget = Widget()
+    try:
+        widget = Widget()
+    except (DatabaseConfigError, SQLAlchemyError) as error:
+        message = str(error) if isinstance(error, DatabaseConfigError) else (
+            'Не удалось подключиться к PostgreSQL. Проверьте сервер, порт, имя базы, '
+            'логин и пароль в DATABASE_URL. Убедитесь, что сервер доступен.'
+        )
+        QMessageBox.critical(None, 'Подключение к базе данных', f'{message}\n\nФайл настройки: {ENV_FILE}')
+        sys.exit(1)
     widget.show()
     sys.exit(app.exec())
