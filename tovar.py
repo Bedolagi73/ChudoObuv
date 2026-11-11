@@ -33,8 +33,11 @@ class Tovar(QWidget):
         self.ui.label_5.setText(f'Состав: {tovar.composition}')
         self.ui.label_6.setText(f'{tovar.price} ₽')
 
-        # фото: import/<имя файла из БД>, файла нет — надпись
-        photo = QPixmap(str(BASE_DIR / "import" / (tovar.image or "")))
+        # в БД хранится имя файла; фотографии лежат в import/images
+        photo = QPixmap(str(BASE_DIR / "import" / "images" / (tovar.image or "")))
+        if photo.isNull():
+            # поддерживаем и прежнее расположение файлов прямо в import
+            photo = QPixmap(str(BASE_DIR / "import" / (tovar.image or "")))
         if photo.isNull():
             self.ui.label.setText("Нет фото")
         else:
