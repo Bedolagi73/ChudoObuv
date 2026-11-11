@@ -47,6 +47,16 @@ class Ui_Widget(object):
 
         self.controlsLayout.addWidget(self.comboBox)
 
+        self.filterLabel = QLabel(Widget)
+        self.filterLabel.setObjectName(u"filterLabel")
+
+        self.controlsLayout.addWidget(self.filterLabel)
+
+        self.categoryComboBox = QComboBox(Widget)
+        self.categoryComboBox.setObjectName(u"categoryComboBox")
+
+        self.controlsLayout.addWidget(self.categoryComboBox)
+
         self.searchLabel = QLabel(Widget)
         self.searchLabel.setObjectName(u"searchLabel")
 
@@ -74,9 +84,11 @@ class Ui_Widget(object):
         self.gridLayout.setColumnStretch(1, 1)
 #if QT_CONFIG(shortcut)
         self.sortLabel.setBuddy(self.comboBox)
+        self.filterLabel.setBuddy(self.categoryComboBox)
         self.searchLabel.setBuddy(self.lineEdit)
 #endif // QT_CONFIG(shortcut)
-        QWidget.setTabOrder(self.comboBox, self.lineEdit)
+        QWidget.setTabOrder(self.comboBox, self.categoryComboBox)
+        QWidget.setTabOrder(self.categoryComboBox, self.lineEdit)
         QWidget.setTabOrder(self.lineEdit, self.listWidget)
 
         self.retranslateUi(Widget)
@@ -88,6 +100,10 @@ class Ui_Widget(object):
         Widget.setWindowTitle(QCoreApplication.translate("Widget", u"\u0427\u0443\u0434\u043e \u041e\u0431\u0443\u0432\u044c", None))
         self.label.setText(QCoreApplication.translate("Widget", u"\u041a\u0430\u0442\u0430\u043b\u043e\u0433 \u0442\u043e\u0432\u0430\u0440\u043e\u0432", None))
         self.sortLabel.setText(QCoreApplication.translate("Widget", u"\u0421\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u043a\u0430", None))
+        self.filterLabel.setText(QCoreApplication.translate("Widget", u"\u0424\u0438\u043b\u044c\u0442\u0440\u0430\u0446\u0438\u044f", None))
+#if QT_CONFIG(accessibility)
+        self.categoryComboBox.setAccessibleName(QCoreApplication.translate("Widget", u"\u0424\u0438\u043b\u044c\u0442\u0440 \u043f\u043e \u043a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438 \u0442\u043e\u0432\u0430\u0440\u0430", None))
+#endif // QT_CONFIG(accessibility)
         self.searchLabel.setText(QCoreApplication.translate("Widget", u"\u041f\u043e\u0438\u0441\u043a", None))
 #if QT_CONFIG(accessibility)
         self.lineEdit.setAccessibleName(QCoreApplication.translate("Widget", u"\u041f\u043e\u0438\u0441\u043a \u0442\u043e\u0432\u0430\u0440\u043e\u0432", None))

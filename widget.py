@@ -6,7 +6,7 @@ from PySide6.QtCore import QSize, QTimer
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from models import engine, Product, DatabaseConfigError, ENV_FILE, config_error
+from models import engine, Product, Cathegory, Subcathegory, DatabaseConfigError, ENV_FILE, config_error
 from tovar import Tovar
 
 
@@ -32,6 +32,12 @@ class Widget(QWidget):
         if engine is None:
             raise DatabaseConfigError(config_error)
 
+        self.ui.categoryComboBox.addItem('Все категории', None)
+        with Session(engine) as db:
+            categories = db.query(Cathegory).order_by(Cathegory.title, Cathegory.id).all()
+            for category in categories:
+                self.ui.categoryComboBox.addItem(category.title, category.id)
+        self.ui.categoryComboBox.currentIndexChanged.connect(self.load_tovars)
         self.load_tovars()
 
     # загружаем список товаров
@@ -43,6 +49,11 @@ class Widget(QWidget):
         # получаем список товаров
         with Session(engine) as db:
             query = db.query(Product)
+            category_id = self.ui.categoryComboBox.currentData()
+            if category_id is not None:
+                query = query.join(Product.subcathegory).filter(
+                    Subcathegory.cathegory_id == category_id
+                )
             search = self.ui.lineEdit.text().strip()
             if search:
                 query = query.filter(or_(
