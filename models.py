@@ -42,7 +42,13 @@ class User(Base):
     role = relationship("Role", back_populates="users", lazy="joined")
 
     def __str__(self):
-        return f'{self.surname} {self.name} {self.patronymic}'
+        return ' '.join(part for part in (self.surname, self.name, self.patronymic) if part)
+
+
+class UserCredential(Base):
+    __tablename__ = "user_credentials"
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    password_hash = Column(String, nullable=False)
 
 class Role(Base):
     __tablename__ = "roles"

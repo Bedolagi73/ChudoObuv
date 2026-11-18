@@ -4,12 +4,22 @@ from PySide6.QtUiTools import QUiLoader
 from PySide6.QtWidgets import QWidget, QVBoxLayout
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
+from orders import format_price
 
 BASE_DIR = Path(__file__).resolve().parent
 
 
+def product_photo(product, size):
+    for directory in (BASE_DIR / 'import' / 'images', BASE_DIR / 'import'):
+        photo = QPixmap(str(directory / (product.image or '')))
+        if not photo.isNull():
+            return photo.scaled(size, size, Qt.AspectRatioMode.KeepAspectRatio,
+                                Qt.TransformationMode.SmoothTransformation)
+    return QPixmap()
+
+
 class Tovar(QWidget):
-    def __init__(self, tovar, main_window, parent=None):
+    def __init__(self, tovar, price, parent=None):
         super().__init__(parent)
         # загружаем UI
         loader = QUiLoader()
@@ -18,10 +28,7 @@ class Tovar(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.ui)
-        # запоминаем ссылку на родительское окно
-        self.main_window = main_window
-        # сохраняем переданный товар
-        self.tovar = tovar
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
         # заполняем поля формы
         self.ui.label_2.setText(f'{tovar.manufacturer.title} | {tovar.name}')
@@ -31,15 +38,11 @@ class Tovar(QWidget):
         amount = sum(s.amount or 0 for s in tovar.stock)
         self.ui.label_4.setText(f'Количество на складе: {amount}')
         self.ui.label_5.setText(f'Состав: {tovar.composition}')
-        self.ui.label_6.setText(f'{tovar.price} ₽')
+        self.ui.label_6.setText(format_price(price))
 
         # в БД хранится имя файла; фотографии лежат в import/images
-        photo = QPixmap(str(BASE_DIR / "import" / "images" / (tovar.image or "")))
-        if photo.isNull():
-            # поддерживаем и прежнее расположение файлов прямо в import
-            photo = QPixmap(str(BASE_DIR / "import" / (tovar.image or "")))
+        photo = product_photo(tovar, 100)
         if photo.isNull():
             self.ui.label.setText("Нет фото")
         else:
-            self.ui.label.setPixmap(photo.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio,
-                                                 Qt.TransformationMode.SmoothTransformation))
+            self.ui.label.setPixmap(photo)
