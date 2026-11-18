@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from auth import AuthError, check_login
+from auth import find_user
 from models import Product
 from orders import CartItem, OrderError, PricesChanged, format_price, get_prices, save_order
 from tovar import load_photo
@@ -31,11 +31,7 @@ class LoginDialog(QDialog):
         self.setMinimumWidth(350)
         form = QFormLayout(self)
         self.login = QLineEdit()
-        self.password = QLineEdit()
-        self.password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.password.setMaxLength(256)
         form.addRow('&Логин', self.login)
-        form.addRow('&Пароль', self.password)
         self.message = make_label()
         form.addRow(self.message)
         actions = QDialogButtonBox()
@@ -48,26 +44,21 @@ class LoginDialog(QDialog):
         self.login.setFocus()
 
     def sign_in(self):
-        login, password = self.login.text().strip(), self.password.text()
-        if not login or not password:
-            self.message.setText('Введите логин и пароль.')
-            (self.password if login else self.login).setFocus()
+        login = self.login.text().strip()
+        if not login:
+            self.message.setText('Введите логин.')
+            self.login.setFocus()
             return
         try:
-            user = check_login(self.database, login, password)
-        except AuthError as error:
-            self.message.setText(str(error))
-            return
+            user = find_user(self.database, login)
         except SQLAlchemyError:
             self.message.setText('Не удалось выполнить вход. Проверьте подключение к базе.')
             return
         if user is None:
-            self.message.setText('Неверный логин или пароль.')
-            self.password.clear()
-            self.password.setFocus()
+            self.message.setText('Не удалось найти пользователя по этому логину.')
+            self.login.setFocus()
             return
         self.user = user
-        self.password.clear()
         self.accept()
 
 

@@ -45,11 +45,6 @@ class User(Base):
         return ' '.join(part for part in (self.surname, self.name, self.patronymic) if part)
 
 
-class UserCredential(Base):
-    __tablename__ = "user_credentials"
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
-    password_hash = Column(String, nullable=False)
-
 class Role(Base):
     __tablename__ = "roles"
     id = Column(Integer, primary_key=True, index=True)
