@@ -9,7 +9,7 @@ from orders import format_price
 BASE_DIR = Path(__file__).resolve().parent
 
 
-def product_photo(product, size):
+def load_photo(product, size):
     for directory in (BASE_DIR / 'import' / 'images', BASE_DIR / 'import'):
         photo = QPixmap(str(directory / (product.image or '')))
         if not photo.isNull():
@@ -21,6 +21,7 @@ def product_photo(product, size):
 class Tovar(QWidget):
     def __init__(self, tovar, price, parent=None):
         super().__init__(parent)
+        self.tovar = tovar
         # загружаем UI
         loader = QUiLoader()
         self.ui = loader.load(str(BASE_DIR / "tovar.ui"), self)
@@ -41,7 +42,7 @@ class Tovar(QWidget):
         self.ui.label_6.setText(format_price(price))
 
         # в БД хранится имя файла; фотографии лежат в import/images
-        photo = product_photo(tovar, 100)
+        photo = load_photo(tovar, 100)
         if photo.isNull():
             self.ui.label.setText("Нет фото")
         else:

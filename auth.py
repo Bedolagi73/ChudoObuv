@@ -4,7 +4,7 @@ from hashlib import pbkdf2_hmac
 from hmac import compare_digest
 from secrets import token_bytes
 
-from sqlalchemy import inspect, select
+from sqlalchemy import inspect
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -17,46 +17,57 @@ class AuthError(ValueError):
     pass
 
 
-def password_digest(password, salt):
+def hash_password(password, salt):
     return pbkdf2_hmac('sha256', password.encode('utf-8'), salt, ROUNDS)
 
 
-def authenticate(database, login, password):
+def find_user(db, login):
+    users = db.query(User).filter(User.user_login == login).limit(2).all()
+    if len(users) == 1:
+        return users[0]
+    return None
+
+
+def check_login(database, login, password):
     with Session(database) as db:
         if not inspect(db.connection()).has_table(UserCredential.__tablename__):
             raise AuthError('Вход ещё не настроен. Попросите администратора назначить пароль.')
-        matches = db.execute(
-            select(User, UserCredential.password_hash)
-            .outerjoin(UserCredential, UserCredential.user_id == User.id)
-            .where(User.user_login == login)
-            .limit(2)
-        ).unique().all()
-        if len(matches) != 1:
+        user = find_user(db, login)
+        if user is None:
             return None
-        user, encoded = matches[0]
-        if encoded is None:
+        entry = db.get(UserCredential, user.id)
+        if entry is None:
             return None
-        try:
-            salt, expected = (bytes.fromhex(part) for part in encoded.split('$'))
-        except ValueError:
-            return None
-        if len(salt) == 16 and len(expected) == 32:
-            if compare_digest(password_digest(password, salt), expected):
-                return user
+
+    try:
+        salt, digest = entry.password_hash.split('$', 1)
+        salt = bytes.fromhex(salt)
+        digest = bytes.fromhex(digest)
+    except ValueError:
         return None
+    if len(salt) != 16 or len(digest) != 32:
+        return None
+    if compare_digest(hash_password(password, salt), digest):
+        return user
+    return None
 
 
 def set_password(database, login, password):
     if not 8 <= len(password) <= 256:
         raise AuthError('Пароль должен содержать от 8 до 256 символов.')
-    with Session(database) as db, db.begin():
-        ids = db.scalars(select(User.id).where(User.user_login == login).limit(2)).all()
-        if len(ids) != 1:
+    with Session(database) as db:
+        user = find_user(db, login)
+        if user is None:
             raise AuthError('Укажите логин, который принадлежит ровно одному пользователю.')
         UserCredential.__table__.create(db.connection(), checkfirst=True)
+        entry = db.get(UserCredential, user.id)
+        if entry is None:
+            entry = UserCredential(user_id=user.id)
+            db.add(entry)
         salt = token_bytes(16)
-        digest = password_digest(password, salt)
-        db.merge(UserCredential(user_id=ids[0], password_hash=f'{salt.hex()}${digest.hex()}'))
+        digest = hash_password(password, salt)
+        entry.password_hash = f'{salt.hex()}${digest.hex()}'
+        db.commit()
 
 
 def main():

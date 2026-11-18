@@ -1,5 +1,4 @@
 import sys
-from dataclasses import replace
 from datetime import date
 
 from PySide6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel,
@@ -11,8 +10,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from models import engine, Product, Cathegory, Subcathegory, DatabaseConfigError, ENV_FILE, config_error
-from order_dialogs import CartDialog, LoginDialog, ProductDialog
-from orders import sale_prices
+from order_dialogs import CartDialog, Info, LoginDialog
+from orders import get_prices
 from tovar import BASE_DIR, Tovar
 
 
@@ -23,7 +22,8 @@ class Widget(QWidget):
         self.ui.setupUi(self)
         self.user = None
         self.cart = {}
-        self.setup_order_controls()
+        self.info_window = None
+        self.make_buttons()
         self.ui.comboBox.addItem('Сортировка: по умолчанию', None)
         self.ui.comboBox.addItem('Цена: по возрастанию', 'asc')
         self.ui.comboBox.addItem('Цена: по убыванию', 'desc')
@@ -49,7 +49,7 @@ class Widget(QWidget):
         self.ui.categoryComboBox.currentIndexChanged.connect(self.load_tovars)
         self.load_tovars(startup=True)
 
-    def setup_order_controls(self):
+    def make_buttons(self):
         self.ui.gridLayout.removeWidget(self.ui.label)
         header = QHBoxLayout()
         header.addWidget(self.ui.label)
@@ -58,7 +58,7 @@ class Widget(QWidget):
         self.account.setTextFormat(Qt.TextFormat.PlainText)
         header.addWidget(self.account)
         self.login_button = QPushButton()
-        self.login_button.clicked.connect(self.toggle_login)
+        self.login_button.clicked.connect(self.change_user)
         header.addWidget(self.login_button)
         self.cart_button = QPushButton()
         self.cart_button.clicked.connect(self.open_cart)
@@ -66,13 +66,13 @@ class Widget(QWidget):
         self.ui.gridLayout.addLayout(header, 0, 1)
 
         self.open_button = QPushButton('Открыть товар')
-        self.open_button.clicked.connect(lambda: self.show_info(self.ui.listWidget.currentItem()))
+        self.open_button.clicked.connect(self.show_selected)
         self.ui.controlsLayout.insertWidget(self.ui.controlsLayout.count() - 1, self.open_button)
-        self.ui.listWidget.itemActivated.connect(self.show_info)
-        self.ui.listWidget.currentItemChanged.connect(self.update_order_controls)
-        self.update_order_controls()
+        self.ui.listWidget.itemClicked.connect(self.showInfo)
+        self.ui.listWidget.currentItemChanged.connect(self.update_buttons)
+        self.update_buttons()
 
-    def update_order_controls(self):
+    def update_buttons(self):
         logged_in = self.user is not None
         self.account.setText(str(self.user) if logged_in else 'Гость')
         self.login_button.setText('Выйти' if logged_in else 'Войти')
@@ -81,14 +81,16 @@ class Widget(QWidget):
         self.open_button.setEnabled(logged_in and self.ui.listWidget.currentItem() is not None)
         self.open_button.setToolTip('' if logged_in else 'Войдите, чтобы открыть товар и оформить заказ')
 
-    def toggle_login(self):
+    def change_user(self):
         if self.user is not None:
-            if self.cart and QMessageBox.question(
-                self, 'Выход', 'При выходе текущий заказ будет очищен. Выйти?',
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            ) != QMessageBox.StandardButton.Yes:
-                return
+            if self.cart:
+                answer = QMessageBox.question(
+                    self, 'Выход', 'При выходе текущий заказ будет очищен. Выйти?',
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if answer != QMessageBox.StandardButton.Yes:
+                    return
             self.user = None
             self.cart.clear()
         else:
@@ -96,34 +98,24 @@ class Widget(QWidget):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.user = dialog.user
             dialog.deleteLater()
-        self.update_order_controls()
+        self.update_buttons()
+
+    def show_selected(self):
+        self.show_info(self.ui.listWidget.currentItem())
 
     def show_info(self, item):
-        """Показывает карточку выбранного товара."""
         if self.user is None or item is None:
             return
-        product_id = item.data(Qt.ItemDataRole.UserRole)
-        try:
-            with Session(engine) as db:
-                product = db.get(Product, product_id)
-                if product is not None:
-                    price = sale_prices(db, {product.id: product.price}, date.today())[product.id]
-        except SQLAlchemyError:
-            QMessageBox.warning(self, 'Карточка товара', 'Не удалось загрузить товар.')
-            return
-        if product is None:
-            QMessageBox.information(self, 'Карточка товара', 'Товар больше недоступен.')
-            self.load_tovars()
-            return
-        dialog = ProductDialog(product, price, self.cart, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            line = dialog.line
-            key = (line.product_id, line.size_id)
-            if key in self.cart:
-                line = replace(line, quantity=line.quantity + self.cart[key].quantity)
-            self.cart[key] = line
-            self.update_order_controls()
-        dialog.deleteLater()
+        # Окно создаём при первом открытии карточки.
+        if self.info_window is None:
+            self.info_window = Info(engine, self.cart, self)
+            self.info_window.added.connect(self.update_buttons)
+            self.info_window.missing.connect(self.load_tovars)
+        tovar = self.ui.listWidget.itemWidget(item)
+        if tovar:
+            self.info_window.show_info(tovar.tovar)
+
+    showInfo = show_info
 
     def open_cart(self):
         if self.user is None:
@@ -137,7 +129,7 @@ class Widget(QWidget):
             self.cart.clear()
             self.load_tovars()
             QMessageBox.information(self, 'Заказ оформлен', f'Заказ №{order_id} от {order_date:%d.%m.%Y}')
-        self.update_order_controls()
+        self.update_buttons()
 
     def load_tovars(self, *, startup=False):
         self.search_timer.stop()
@@ -156,7 +148,8 @@ class Widget(QWidget):
                         Product.description.icontains(search, autoescape=True),
                     ))
                 products = query.order_by(Product.id).all()
-                prices = sale_prices(db, {product.id: product.price for product in products}, date.today())
+                base_prices = {product.id: product.price for product in products}
+                prices = get_prices(db, base_prices, date.today())
         except SQLAlchemyError:
             if startup:
                 raise
@@ -168,7 +161,6 @@ class Widget(QWidget):
         self.ui.listWidget.clear()
         for product in products:
             item = QListWidgetItem(self.ui.listWidget)
-            item.setData(Qt.ItemDataRole.UserRole, product.id)
             item.setSizeHint(QSize(0, 125))
             self.ui.listWidget.setItemWidget(item, Tovar(product, prices[product.id]))
 

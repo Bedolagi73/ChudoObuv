@@ -1,21 +1,21 @@
-import re
-from collections import Counter
-from dataclasses import replace
+from datetime import date
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QPushButton, QScrollArea, QSpinBox, QTableWidget,
+    QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSpinBox, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
-from auth import AuthError, authenticate
-from orders import CartLine, OrderError, PricesChanged, format_price, place_order
-from tovar import product_photo
+from auth import AuthError, check_login
+from models import Product
+from orders import CartItem, OrderError, PricesChanged, format_price, get_prices, save_order
+from tovar import load_photo
 
 
-def text_label(value=''):
+def make_label(value=''):
     label = QLabel(value)
     label.setTextFormat(Qt.TextFormat.PlainText)
     label.setWordWrap(True)
@@ -36,7 +36,7 @@ class LoginDialog(QDialog):
         self.password.setMaxLength(256)
         form.addRow('&Логин', self.login)
         form.addRow('&Пароль', self.password)
-        self.message = text_label()
+        self.message = make_label()
         form.addRow(self.message)
         actions = QDialogButtonBox()
         submit = actions.addButton('Войти', QDialogButtonBox.ButtonRole.AcceptRole)
@@ -54,7 +54,7 @@ class LoginDialog(QDialog):
             (self.password if login else self.login).setFocus()
             return
         try:
-            user = authenticate(self.database, login, password)
+            user = check_login(self.database, login, password)
         except AuthError as error:
             self.message.setText(str(error))
             return
@@ -72,17 +72,20 @@ class LoginDialog(QDialog):
 
 
 def size_order(title):
-    if re.fullmatch(r'[0-9]+(?:[,.][0-9]+)?', title):
-        return (0, float(title.replace(',', '.')))
-    return (1, title.casefold())
+    try:
+        return 0, float(title.replace(',', '.'))
+    except ValueError:
+        return 1, title.casefold()
 
 
-class ProductDialog(QDialog):
-    def __init__(self, product, price, cart, parent=None):
+class Info(QDialog):
+    added = Signal()
+    missing = Signal()
+
+    def __init__(self, database, cart, parent=None):
         super().__init__(parent)
-        self.product = product
-        self.price = price
-        self.line = None
+        self.database = database
+        self.cart = cart
         self.setWindowTitle('Карточка товара')
         self.resize(640, 485)
         layout = QVBoxLayout(self)
@@ -91,57 +94,34 @@ class ProductDialog(QDialog):
         panel = QWidget()
         overview = QHBoxLayout(panel)
         overview.setAlignment(Qt.AlignmentFlag.AlignTop)
-        photo = text_label('Нет фото')
-        photo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        photo.setAccessibleName(f'Изображение товара: {product.name}')
-        photo.setFixedSize(144, 144)
-        photo.setStyleSheet('background: #D2F6E7; color: #172F2C;')
-        pixmap = product_photo(product, 144)
-        if not pixmap.isNull():
-            photo.setPixmap(pixmap)
-        overview.addWidget(photo, alignment=Qt.AlignmentFlag.AlignTop)
+        self.photo = make_label()
+        self.photo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.photo.setFixedSize(144, 144)
+        self.photo.setStyleSheet('background: #D2F6E7; color: #172F2C;')
+        overview.addWidget(self.photo, alignment=Qt.AlignmentFlag.AlignTop)
 
         fields = QFormLayout()
         fields.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
-        fields.addRow('Наименование', text_label(product.name))
-        fields.addRow('Производство', text_label(product.manufacturer.title))
-        category = product.subcathegory
-        fields.addRow('Категория', text_label(f'{category.cathegory.title} / {category.title}'))
-        fields.addRow('Цена со скидкой', text_label(format_price(price)))
-        fields.addRow('Состав', text_label(product.composition or '—'))
-        fields.addRow('Описание', text_label(product.description or '—'))
+        self.fields = {}
+        for title in ('Наименование', 'Производство', 'Категория', 'Цена со скидкой',
+                      'Состав', 'Описание', 'Размерный ряд', 'Доступно для заказа (пар)'):
+            label = make_label()
+            fields.addRow(title, label)
+            self.fields[title] = label
         overview.addLayout(fields, 1)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(panel)
         layout.addWidget(scroll, 1)
 
-        titles = {}
-        stock = Counter()
-        for row in product.stock:
-            titles[row.size_id] = row.size.title
-            stock[row.size_id] += max(row.amount, 0)
-        sizes = sorted(titles, key=lambda size_id: size_order(titles[size_id]))
-        available = [f'{titles[size_id]} — {stock[size_id]}' for size_id in sizes if stock[size_id]]
-        fields.addRow('Размерный ряд', text_label(', '.join(titles[i] for i in sizes) or '—'))
-        fields.addRow('Доступно для заказа (пар)', text_label(', '.join(available) or 'Нет в наличии'))
-
         selection = QFormLayout()
         self.size = QComboBox()
-        self.size.addItem('Выберите размер', None)
-        for size_id in sizes:
-            added = cart.get((product.id, size_id))
-            remaining = stock[size_id] - (added.quantity if added else 0)
-            if remaining > 0:
-                self.size.addItem(f'{titles[size_id]} · доступно {remaining}', (size_id, titles[size_id], remaining))
-        self.size.setEnabled(self.size.count() > 1)
         selection.addRow('&Размер', self.size)
         self.quantity = QSpinBox()
         selection.addRow('&Количество пар', self.quantity)
         layout.addLayout(selection)
-        if self.size.count() == 1:
-            message = 'Доступные пары уже добавлены в заказ.' if available else 'Добавить товар пока нельзя.'
-            layout.addWidget(text_label(message))
+        self.notice = make_label()
+        layout.addWidget(self.notice)
 
         actions = QDialogButtonBox()
         self.add_button = actions.addButton('Добавить в заказ', QDialogButtonBox.ButtonRole.AcceptRole)
@@ -151,25 +131,103 @@ class ProductDialog(QDialog):
             'QPushButton:focus { border: 2px solid #172F2C; }'
         )
         actions.addButton('Закрыть', QDialogButtonBox.ButtonRole.RejectRole)
-        actions.accepted.connect(self.add_to_cart)
+        actions.accepted.connect(self.add_item)
         actions.rejected.connect(self.reject)
         layout.addWidget(actions)
-        self.size.currentIndexChanged.connect(self.update_quantity)
-        self.update_quantity()
+        self.size.currentIndexChanged.connect(self.change_amount)
 
-    def update_quantity(self):
-        size = self.size.currentData()
-        self.quantity.setRange(1, size[2] if size else 1)
-        self.quantity.setEnabled(size is not None)
-        self.add_button.setEnabled(size is not None)
+    def show_info(self, tovar):
+        try:
+            with Session(self.database) as db:
+                current = db.get(Product, tovar.id)
+                if current is not None:
+                    prices = get_prices(db, {current.id: current.price}, date.today())
+        except SQLAlchemyError:
+            QMessageBox.warning(self.parentWidget(), 'Карточка товара', 'Не удалось загрузить товар.')
+            return
+        if current is None:
+            QMessageBox.information(self.parentWidget(), 'Карточка товара', 'Товар больше недоступен.')
+            self.missing.emit()
+            return
+        self.tovar = current
+        self.price = prices[current.id]
+        self.fill()
+        self.exec()
 
-    def add_to_cart(self):
+    def fill(self):
+        tovar = self.tovar
+        self.photo.setAccessibleName(f'Изображение товара: {tovar.name}')
+        photo = load_photo(tovar, 144)
+        if photo.isNull():
+            self.photo.setText('Нет фото')
+        else:
+            self.photo.setPixmap(photo)
+
+        category = tovar.subcathegory
+        self.fields['Наименование'].setText(tovar.name)
+        self.fields['Производство'].setText(tovar.manufacturer.title)
+        self.fields['Категория'].setText(f'{category.cathegory.title} / {category.title}')
+        self.fields['Цена со скидкой'].setText(format_price(self.price))
+        self.fields['Состав'].setText(tovar.composition or '—')
+        self.fields['Описание'].setText(tovar.description or '—')
+        self.fill_sizes()
+
+    def fill_sizes(self):
+        titles = {}
+        stock = {}
+        for row in self.tovar.stock:
+            titles[row.size_id] = row.size.title
+            stock[row.size_id] = stock.get(row.size_id, 0) + max(row.amount, 0)
+
+        sizes = sorted(titles, key=lambda size_id: size_order(titles[size_id]))
+        available = []
+        self.size.clear()
+        self.size.addItem('Выберите размер')
+        for size_id in sizes:
+            title = titles[size_id]
+            amount = stock[size_id]
+            if amount > 0:
+                available.append(f'{title} — {amount}')
+            added = self.cart.get((self.tovar.id, size_id))
+            if added is not None:
+                amount -= added.quantity
+            if amount > 0:
+                self.size.addItem(f'{title} · доступно {amount}', (size_id, title, amount))
+
+        row = ', '.join(titles[size_id] for size_id in sizes)
+        self.fields['Размерный ряд'].setText(row or '—')
+        self.fields['Доступно для заказа (пар)'].setText(', '.join(available) or 'Нет в наличии')
+        has_sizes = self.size.count() > 1
+        self.size.setEnabled(has_sizes)
+        self.quantity.setValue(1)
+        self.change_amount()
+        self.notice.setVisible(not has_sizes)
+        if available:
+            self.notice.setText('Доступные пары уже добавлены в заказ.')
+        else:
+            self.notice.setText('Добавить товар пока нельзя.')
+        if has_sizes:
+            self.size.setFocus()
+
+    def change_amount(self):
         size = self.size.currentData()
-        if size is not None:
-            size_id, title, _ = size
-            self.line = CartLine(self.product.id, size_id, self.product.name, title,
-                                 self.price, self.quantity.value())
-            self.accept()
+        chosen = size is not None
+        self.quantity.setRange(1, size[2] if chosen else 1)
+        self.quantity.setEnabled(chosen)
+        self.add_button.setEnabled(chosen)
+
+    def add_item(self):
+        size = self.size.currentData()
+        if size is None:
+            return
+        size_id, title, _ = size
+        key = (self.tovar.id, size_id)
+        quantity = self.quantity.value()
+        if key in self.cart:
+            quantity += self.cart[key].quantity
+        self.cart[key] = CartItem(self.tovar.id, size_id, self.tovar.name, title, self.price, quantity)
+        self.accept()
+        self.added.emit()
 
 
 class CartDialog(QDialog):
@@ -194,26 +252,26 @@ class CartDialog(QDialog):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table)
         self.remove = QPushButton('Удалить позицию')
-        self.remove.clicked.connect(self.remove_line)
-        self.total = text_label()
+        self.remove.clicked.connect(self.remove_item)
+        self.total = make_label()
         summary = QHBoxLayout()
         summary.addWidget(self.remove)
         summary.addStretch()
         summary.addWidget(self.total)
         layout.addLayout(summary)
-        self.message = text_label()
+        self.message = make_label()
         layout.addWidget(self.message)
         actions = QDialogButtonBox()
         self.confirm = actions.addButton('Подтвердить заказ', QDialogButtonBox.ButtonRole.AcceptRole)
         self.confirm.setAutoDefault(False)
         actions.addButton('Продолжить покупки', QDialogButtonBox.ButtonRole.RejectRole)
-        actions.accepted.connect(self.submit)
+        actions.accepted.connect(self.save)
         actions.rejected.connect(self.reject)
         layout.addWidget(actions)
-        self.table.itemSelectionChanged.connect(self.update_selection)
-        self.render_cart()
+        self.table.itemSelectionChanged.connect(self.update_remove)
+        self.fill()
 
-    def render_cart(self):
+    def fill(self):
         self.keys = list(self.cart)
         self.table.clearContents()
         self.table.setRowCount(len(self.keys))
@@ -226,25 +284,25 @@ class CartDialog(QDialog):
         self.table.resizeRowsToContents()
         self.total.setText(f'Итого: {format_price(sum(line.total for line in self.cart.values()))}')
         self.confirm.setEnabled(bool(self.cart))
-        self.update_selection()
+        self.update_remove()
 
-    def update_selection(self):
+    def update_remove(self):
         self.remove.setEnabled(bool(self.table.selectedItems()))
 
-    def remove_line(self):
+    def remove_item(self):
         selected = self.table.selectedIndexes()
         if selected:
             del self.cart[self.keys[selected[0].row()]]
             self.message.clear()
-            self.render_cart()
+            self.fill()
 
-    def submit(self):
+    def save(self):
         try:
-            self.order = place_order(self.database, self.user_id, self.cart)
+            self.order = save_order(self.database, self.user_id, self.cart)
         except PricesChanged as error:
-            for key, line in self.cart.items():
-                self.cart[key] = replace(line, unit_price=error.prices[line.product_id])
-            self.render_cart()
+            for item in self.cart.values():
+                item.unit_price = error.prices[item.product_id]
+            self.fill()
             self.message.setText(str(error))
         except OrderError as error:
             self.message.setText(str(error))
