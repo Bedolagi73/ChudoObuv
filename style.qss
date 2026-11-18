@@ -1,0 +1,71 @@
+QWidget#Widget, QDialog, QWidget#infoPanel {
+    background-color: #FFFFFF;
+    color: #172F2C;
+}
+
+QFrame#catalogHeader, QWidget#productCard, QLabel#productPhoto,
+QHeaderView::section {
+    background-color: #D2F6E7;
+    color: #172F2C;
+}
+
+QLabel#catalogTitle {
+    font-size: 20px;
+    font-weight: bold;
+}
+
+QWidget#productCard[lowStock="true"] {
+    background-color: #FF8080;
+}
+
+QListWidget, QTableWidget, QScrollArea {
+    background-color: #FFFFFF;
+    border: 1px solid #9AB4AD;
+    selection-background-color: #70B2AF;
+    selection-color: #172F2C;
+}
+
+QHeaderView::section {
+    border: none;
+    padding: 5px;
+}
+
+QLineEdit, QComboBox, QSpinBox {
+    min-height: 26px;
+    padding: 2px 6px;
+    background-color: #FFFFFF;
+    color: #172F2C;
+    border: 1px solid #79968F;
+    border-radius: 4px;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QPushButton:focus {
+    border: 2px solid #365E53;
+}
+
+QPushButton {
+    min-height: 28px;
+    padding: 3px 12px;
+    background-color: #FFFFFF;
+    color: #172F2C;
+    border: 1px solid #79968F;
+    border-radius: 4px;
+}
+
+QPushButton:hover {
+    background-color: #D2F6E7;
+}
+
+QPushButton[primary="true"]:enabled {
+    background-color: #70B2AF;
+}
+
+QPushButton:pressed, QPushButton[primary="true"]:pressed {
+    background-color: #64A39F;
+}
+
+QPushButton:disabled, QComboBox:disabled, QSpinBox:disabled {
+    background-color: #EFF4F2;
+    color: #4E635D;
+    border-color: #AEBFBA;
+}

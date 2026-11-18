@@ -27,9 +27,11 @@ class Tovar(QWidget):
         self.ui = loader.load(str(BASE_DIR / "tovar.ui"), self)
         # компоновщик: форма растягивается вместе со строкой списка
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(3, 3, 3, 3)
         layout.addWidget(self.ui)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.ui.setObjectName('productCard')
+        self.ui.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
 
         # заполняем поля формы
         self.ui.label_2.setText(f'{tovar.manufacturer.title} | {tovar.name}')
@@ -37,6 +39,7 @@ class Tovar(QWidget):
         self.ui.label_3.setText(f'Категория: {tovar.subcathegory.cathegory.title} / {tovar.subcathegory.title}')
         # количество — сумма остатков по всем размерам
         amount = sum(s.amount or 0 for s in tovar.stock)
+        self.ui.setProperty('lowStock', amount <= 3)
         self.ui.label_4.setText(f'Количество на складе: {amount}')
         self.ui.label_5.setText(f'Состав: {tovar.composition}')
         self.ui.label_6.setText(format_price(price))

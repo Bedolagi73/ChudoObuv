@@ -1,10 +1,10 @@
 import sys
 from datetime import date
 
-from PySide6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel,
+from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QHBoxLayout, QLabel,
                                QListWidgetItem, QMessageBox, QPushButton, QWidget)
 from ui_form import Ui_Widget
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QFont, QIcon, QPixmap
 from PySide6.QtCore import QSize, Qt, QTimer
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -13,6 +13,18 @@ from models import engine, Product, Cathegory, Subcathegory, DatabaseConfigError
 from order_dialogs import CartDialog, Info, LoginDialog
 from orders import get_prices
 from tovar import BASE_DIR, Tovar
+
+IMPORT_DIR = BASE_DIR / 'import'
+
+
+def set_style(app):
+    app.setStyle('Fusion')
+    app.styleHints().setColorScheme(Qt.ColorScheme.Light)
+    app.setFont(QFont('Calibri', 11))
+    app.setStyleSheet((BASE_DIR / 'style.qss').read_text(encoding='utf-8'))
+    icon = IMPORT_DIR / 'Чудо Обувь.ico'
+    if icon.is_file():
+        app.setWindowIcon(QIcon(str(icon)))
 
 
 class Widget(QWidget):
@@ -36,8 +48,6 @@ class Widget(QWidget):
         self.search_timer.setInterval(300)
         self.search_timer.timeout.connect(self.load_tovars)
         self.ui.lineEdit.textChanged.connect(lambda _text: self.search_timer.start())
-        # загружаем логотип фирмы
-        self.setWindowIcon(QIcon(str(BASE_DIR / 'import' / 'Чудо Обувь.ico')))
         if engine is None:
             raise DatabaseConfigError(config_error)
 
@@ -51,7 +61,18 @@ class Widget(QWidget):
 
     def make_buttons(self):
         self.ui.gridLayout.removeWidget(self.ui.label)
-        header = QHBoxLayout()
+        self.ui.gridLayout.removeItem(self.ui.horizontalSpacer)
+        bar = QFrame()
+        bar.setObjectName('catalogHeader')
+        header = QHBoxLayout(bar)
+        logo = QPixmap(str(IMPORT_DIR / 'logo.png'))
+        if not logo.isNull():
+            logo_label = QLabel()
+            logo_label.setAccessibleName('Логотип Чудо Обувь')
+            logo_label.setPixmap(logo.scaled(128, 56, Qt.AspectRatioMode.KeepAspectRatio,
+                                             Qt.TransformationMode.SmoothTransformation))
+            header.addWidget(logo_label)
+        self.ui.label.setObjectName('catalogTitle')
         header.addWidget(self.ui.label)
         header.addStretch()
         self.account = QLabel()
@@ -61,9 +82,10 @@ class Widget(QWidget):
         self.login_button.clicked.connect(self.change_user)
         header.addWidget(self.login_button)
         self.cart_button = QPushButton()
+        self.cart_button.setProperty('primary', True)
         self.cart_button.clicked.connect(self.open_cart)
         header.addWidget(self.cart_button)
-        self.ui.gridLayout.addLayout(header, 0, 1)
+        self.ui.gridLayout.addWidget(bar, 0, 0, 1, 2)
 
         self.open_button = QPushButton('Открыть товар')
         self.open_button.clicked.connect(self.show_selected)
@@ -167,6 +189,7 @@ class Widget(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    set_style(app)
     try:
         widget = Widget()
     except (DatabaseConfigError, SQLAlchemyError) as error:

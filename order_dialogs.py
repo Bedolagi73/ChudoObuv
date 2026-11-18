@@ -36,6 +36,7 @@ class LoginDialog(QDialog):
         form.addRow(self.message)
         actions = QDialogButtonBox()
         submit = actions.addButton('Войти', QDialogButtonBox.ButtonRole.AcceptRole)
+        submit.setProperty('primary', True)
         submit.setDefault(True)
         actions.addButton('Отмена', QDialogButtonBox.ButtonRole.RejectRole)
         actions.accepted.connect(self.sign_in)
@@ -83,12 +84,13 @@ class Info(QDialog):
         layout.setSpacing(12)
 
         panel = QWidget()
+        panel.setObjectName('infoPanel')
         overview = QHBoxLayout(panel)
         overview.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.photo = make_label()
+        self.photo.setObjectName('productPhoto')
         self.photo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.photo.setFixedSize(144, 144)
-        self.photo.setStyleSheet('background: #D2F6E7; color: #172F2C;')
         overview.addWidget(self.photo, alignment=Qt.AlignmentFlag.AlignTop)
 
         fields = QFormLayout()
@@ -116,11 +118,8 @@ class Info(QDialog):
 
         actions = QDialogButtonBox()
         self.add_button = actions.addButton('Добавить в заказ', QDialogButtonBox.ButtonRole.AcceptRole)
+        self.add_button.setProperty('primary', True)
         self.add_button.setDefault(True)
-        self.add_button.setStyleSheet(
-            'QPushButton:enabled { background: #70B2AF; color: #172F2C; }'
-            'QPushButton:focus { border: 2px solid #172F2C; }'
-        )
         actions.addButton('Закрыть', QDialogButtonBox.ButtonRole.RejectRole)
         actions.accepted.connect(self.add_item)
         actions.rejected.connect(self.reject)
@@ -254,6 +253,7 @@ class CartDialog(QDialog):
         layout.addWidget(self.message)
         actions = QDialogButtonBox()
         self.confirm = actions.addButton('Подтвердить заказ', QDialogButtonBox.ButtonRole.AcceptRole)
+        self.confirm.setProperty('primary', True)
         self.confirm.setAutoDefault(False)
         actions.addButton('Продолжить покупки', QDialogButtonBox.ButtonRole.RejectRole)
         actions.accepted.connect(self.save)
