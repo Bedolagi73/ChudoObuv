@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from models import engine, Product, Cathegory, Subcathegory, DatabaseConfigError, ENV_FILE, config_error
 from order_dialogs import CartDialog, Info, LoginDialog
-from orders import get_prices
+from orders import CartItem, get_prices
 from tovar import BASE_DIR, Tovar
 
 IMPORT_DIR = BASE_DIR / 'import'
@@ -131,13 +131,21 @@ class Widget(QWidget):
         # Окно создаём при первом открытии карточки.
         if self.info_window is None:
             self.info_window = Info(engine, self.cart, self)
-            self.info_window.added.connect(self.update_buttons)
+            self.info_window.add.connect(self.add_tovar)
             self.info_window.missing.connect(self.load_tovars)
         tovar = self.ui.listWidget.itemWidget(item)
         if tovar:
             self.info_window.show_info(tovar.tovar)
 
     showInfo = show_info
+
+    def add_tovar(self, tovar, size, amount):
+        key = (tovar.id, size.id)
+        if key in self.cart:
+            amount += self.cart[key].quantity
+        price = self.info_window.price
+        self.cart[key] = CartItem(tovar.id, size.id, tovar.name, size.title, price, amount)
+        self.update_buttons()
 
     def open_cart(self):
         if self.user is None:

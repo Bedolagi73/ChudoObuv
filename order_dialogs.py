@@ -10,8 +10,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from auth import find_user
-from models import Product
-from orders import CartItem, OrderError, PricesChanged, format_price, get_prices, save_order
+from models import Product, Size
+from orders import OrderError, PricesChanged, format_price, get_prices, save_order
 from tovar import load_photo
 
 
@@ -71,7 +71,7 @@ def size_order(title):
 
 
 class Info(QDialog):
-    added = Signal()
+    add = Signal(Product, Size, int)
     missing = Signal()
 
     def __init__(self, database, cart, parent=None):
@@ -97,7 +97,7 @@ class Info(QDialog):
         fields.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         self.fields = {}
         for title in ('Наименование', 'Производство', 'Категория', 'Цена со скидкой',
-                      'Состав', 'Описание', 'Размерный ряд', 'Доступно для заказа (пар)'):
+                      'Состав', 'Описание', 'Размерный ряд'):
             label = make_label()
             fields.addRow(title, label)
             self.fields[title] = label
@@ -109,7 +109,7 @@ class Info(QDialog):
 
         selection = QFormLayout()
         self.size = QComboBox()
-        selection.addRow('&Размер', self.size)
+        selection.addRow('Доступные &размеры', self.size)
         self.quantity = QSpinBox()
         selection.addRow('&Количество пар', self.quantity)
         layout.addLayout(selection)
@@ -121,7 +121,7 @@ class Info(QDialog):
         self.add_button.setProperty('primary', True)
         self.add_button.setDefault(True)
         actions.addButton('Закрыть', QDialogButtonBox.ButtonRole.RejectRole)
-        actions.accepted.connect(self.add_item)
+        self.add_button.clicked.connect(self.add_tovar)
         actions.rejected.connect(self.reject)
         layout.addWidget(actions)
         self.size.currentIndexChanged.connect(self.change_amount)
@@ -163,61 +163,54 @@ class Info(QDialog):
         self.fill_sizes()
 
     def fill_sizes(self):
-        titles = {}
+        sizes = {}
         stock = {}
         for row in self.tovar.stock:
-            titles[row.size_id] = row.size.title
+            sizes[row.size_id] = row.size
             stock[row.size_id] = stock.get(row.size_id, 0) + max(row.amount, 0)
 
-        sizes = sorted(titles, key=lambda size_id: size_order(titles[size_id]))
-        available = []
+        sizes = sorted(sizes.values(), key=lambda size: size_order(size.title))
+        titles = [size.title for size in sizes]
+        self.fields['Размерный ряд'].setText(', '.join(titles) or '—')
+
         self.size.clear()
         self.size.addItem('Выберите размер')
-        for size_id in sizes:
-            title = titles[size_id]
-            amount = stock[size_id]
-            if amount > 0:
-                available.append(f'{title} — {amount}')
-            added = self.cart.get((self.tovar.id, size_id))
+        self.available = {}
+        for size in sizes:
+            amount = stock[size.id]
+            added = self.cart.get((self.tovar.id, size.id))
             if added is not None:
                 amount -= added.quantity
             if amount > 0:
-                self.size.addItem(f'{title} · доступно {amount}', (size_id, title, amount))
+                self.available[size.id] = amount
+                self.size.addItem(size.title, size)
 
-        row = ', '.join(titles[size_id] for size_id in sizes)
-        self.fields['Размерный ряд'].setText(row or '—')
-        self.fields['Доступно для заказа (пар)'].setText(', '.join(available) or 'Нет в наличии')
         has_sizes = self.size.count() > 1
         self.size.setEnabled(has_sizes)
         self.quantity.setValue(1)
         self.change_amount()
         self.notice.setVisible(not has_sizes)
-        if available:
+        if any(stock.values()):
             self.notice.setText('Доступные пары уже добавлены в заказ.')
         else:
-            self.notice.setText('Добавить товар пока нельзя.')
+            self.notice.setText('Нет размеров в наличии.')
         if has_sizes:
             self.size.setFocus()
 
     def change_amount(self):
         size = self.size.currentData()
         chosen = size is not None
-        self.quantity.setRange(1, size[2] if chosen else 1)
+        self.quantity.setRange(1, self.available[size.id] if chosen else 1)
         self.quantity.setEnabled(chosen)
         self.add_button.setEnabled(chosen)
 
-    def add_item(self):
+    def add_tovar(self):
         size = self.size.currentData()
         if size is None:
             return
-        size_id, title, _ = size
-        key = (self.tovar.id, size_id)
-        quantity = self.quantity.value()
-        if key in self.cart:
-            quantity += self.cart[key].quantity
-        self.cart[key] = CartItem(self.tovar.id, size_id, self.tovar.name, title, self.price, quantity)
+        amount = self.quantity.value()
+        self.add.emit(self.tovar, size, amount)
         self.accept()
-        self.added.emit()
 
 
 class CartDialog(QDialog):
