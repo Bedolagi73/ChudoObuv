@@ -214,6 +214,8 @@ class Info(QDialog):
 
 
 class CartDialog(QDialog):
+    changed = Signal()
+
     def __init__(self, database, user_id, cart, parent=None):
         super().__init__(parent)
         self.database = database
@@ -279,6 +281,7 @@ class CartDialog(QDialog):
             del self.cart[self.keys[selected[0].row()]]
             self.message.clear()
             self.fill()
+            self.changed.emit()
 
     def save(self):
         try:

@@ -15,9 +15,10 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QApplication, QComboBox, QGridLayout, QLabel,
-    QLineEdit, QListWidget, QListWidgetItem, QSizePolicy,
-    QSpacerItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QGridLayout,
+    QLabel, QLineEdit, QListView, QListWidget,
+    QListWidgetItem, QSizePolicy, QSpacerItem, QVBoxLayout,
+    QWidget)
 
 class Ui_Widget(object):
     def setupUi(self, Widget):
@@ -68,9 +69,24 @@ class Ui_Widget(object):
 
         self.controlsLayout.addWidget(self.lineEdit)
 
-        self.verticalSpacer = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
+        self.orderLabel = QLabel(Widget)
+        self.orderLabel.setObjectName(u"orderLabel")
 
-        self.controlsLayout.addItem(self.verticalSpacer)
+        self.controlsLayout.addWidget(self.orderLabel)
+
+        self.listOrder = QListView(Widget)
+        self.listOrder.setObjectName(u"listOrder")
+        sizePolicy = QSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.listOrder.sizePolicy().hasHeightForWidth())
+        self.listOrder.setSizePolicy(sizePolicy)
+        self.listOrder.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.listOrder.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.listOrder.setWordWrap(True)
+        self.listOrder.setResizeMode(QListView.ResizeMode.Adjust)
+
+        self.controlsLayout.addWidget(self.listOrder)
 
 
         self.gridLayout.addLayout(self.controlsLayout, 1, 0, 1, 1)
@@ -89,7 +105,8 @@ class Ui_Widget(object):
 #endif // QT_CONFIG(shortcut)
         QWidget.setTabOrder(self.comboBox, self.categoryComboBox)
         QWidget.setTabOrder(self.categoryComboBox, self.lineEdit)
-        QWidget.setTabOrder(self.lineEdit, self.listWidget)
+        QWidget.setTabOrder(self.lineEdit, self.listOrder)
+        QWidget.setTabOrder(self.listOrder, self.listWidget)
 
         self.retranslateUi(Widget)
 
@@ -109,5 +126,9 @@ class Ui_Widget(object):
         self.lineEdit.setAccessibleName(QCoreApplication.translate("Widget", u"\u041f\u043e\u0438\u0441\u043a \u0442\u043e\u0432\u0430\u0440\u043e\u0432", None))
 #endif // QT_CONFIG(accessibility)
         self.lineEdit.setPlaceholderText(QCoreApplication.translate("Widget", u"\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 \u0438\u043b\u0438 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435", None))
+        self.orderLabel.setText(QCoreApplication.translate("Widget", u"\u041a\u043e\u0440\u0437\u0438\u043d\u0430", None))
+#if QT_CONFIG(accessibility)
+        self.listOrder.setAccessibleName(QCoreApplication.translate("Widget", u"\u041f\u043e\u0437\u0438\u0446\u0438\u0438 \u0437\u0430\u043a\u0430\u0437\u0430", None))
+#endif // QT_CONFIG(accessibility)
     # retranslateUi
 

@@ -4,7 +4,7 @@ from datetime import date
 from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QHBoxLayout, QLabel,
                                QListWidgetItem, QMessageBox, QPushButton, QWidget)
 from ui_form import Ui_Widget
-from PySide6.QtGui import QFont, QIcon, QPixmap
+from PySide6.QtGui import QFont, QIcon, QPixmap, QStandardItem, QStandardItemModel
 from PySide6.QtCore import QSize, Qt, QTimer
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -35,6 +35,8 @@ class Widget(QWidget):
         self.user = None
         self.cart = {}
         self.info_window = None
+        self.model = QStandardItemModel(self)
+        self.ui.listOrder.setModel(self.model)
         self.make_buttons()
         self.ui.comboBox.addItem('Сортировка: по умолчанию', None)
         self.ui.comboBox.addItem('Цена: по возрастанию', 'asc')
@@ -89,7 +91,8 @@ class Widget(QWidget):
 
         self.open_button = QPushButton('Открыть товар')
         self.open_button.clicked.connect(self.show_selected)
-        self.ui.controlsLayout.insertWidget(self.ui.controlsLayout.count() - 1, self.open_button)
+        order_index = self.ui.controlsLayout.indexOf(self.ui.orderLabel)
+        self.ui.controlsLayout.insertWidget(order_index, self.open_button)
         self.ui.listWidget.itemClicked.connect(self.showInfo)
         self.ui.listWidget.currentItemChanged.connect(self.update_buttons)
         self.update_buttons()
@@ -100,6 +103,7 @@ class Widget(QWidget):
         self.login_button.setText('Выйти' if logged_in else 'Войти')
         self.cart_button.setText(f'Заказ ({sum(line.quantity for line in self.cart.values())})')
         self.cart_button.setEnabled(logged_in)
+        self.ui.listOrder.setEnabled(logged_in)
         self.open_button.setEnabled(logged_in and self.ui.listWidget.currentItem() is not None)
         self.open_button.setToolTip('' if logged_in else 'Войдите, чтобы открыть товар и оформить заказ')
 
@@ -120,7 +124,7 @@ class Widget(QWidget):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.user = dialog.user
             dialog.deleteLater()
-        self.update_buttons()
+        self.load_order()
 
     def show_selected(self):
         self.show_info(self.ui.listWidget.currentItem())
@@ -145,21 +149,32 @@ class Widget(QWidget):
             amount += self.cart[key].quantity
         price = self.info_window.price
         self.cart[key] = CartItem(tovar.id, size.id, tovar.name, size.title, price, amount)
+        self.load_order()
+
+    def load_order(self):
+        self.model.clear()
+        for line in self.cart.values():
+            text = f'{line.product_name}\nРазмер {line.size} · Пар: {line.quantity}'
+            item = QStandardItem(text)
+            item.setToolTip(text)
+            item.setData(line, Qt.ItemDataRole.UserRole)
+            self.model.appendRow(item)
         self.update_buttons()
 
     def open_cart(self):
         if self.user is None:
             return
         dialog = CartDialog(engine, self.user.id, self.cart, self)
+        dialog.changed.connect(self.load_order)
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
         order = dialog.order
         dialog.deleteLater()
         if accepted:
             order_id, order_date = order
             self.cart.clear()
+            self.load_order()
             self.load_tovars()
             QMessageBox.information(self, 'Заказ оформлен', f'Заказ №{order_id} от {order_date:%d.%m.%Y}')
-        self.update_buttons()
 
     def load_tovars(self, *, startup=False):
         self.search_timer.stop()
