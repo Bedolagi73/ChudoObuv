@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from info import Info
 from login_dialog import LoginDialog
 from models import Cathegory, Order, Product, Product_tovar, Size, engine
-from orders import OrderLine, StockUnavailableError, next_order_code, take_stock
+from orders import next_order_code, take_stock
 from tovar import Tovar
 from ui_form import Ui_Widget
 
@@ -29,11 +29,11 @@ class Widget(QWidget):
 
         self.user_id = None
         self.user_name = None
-        self.order_model = QStandardItemModel(self)
-        self.ui.listOrder.setModel(self.order_model)
-        self.order_model.rowsInserted.connect(self.update_order_button)
-        self.order_model.rowsRemoved.connect(self.update_order_button)
-        self.order_model.modelReset.connect(self.update_order_button)
+        self.model = QStandardItemModel(self)
+        self.ui.listOrder.setModel(self.model)
+        self.model.rowsInserted.connect(self.update_order_button)
+        self.model.rowsRemoved.connect(self.update_order_button)
+        self.model.modelReset.connect(self.update_order_button)
         self.ui.listWidget.setSpacing(4)
         self.ui.listWidget.itemClicked.connect(self.show_info)
         self.ui.listWidget.itemActivated.connect(self.show_info)
@@ -61,7 +61,7 @@ class Widget(QWidget):
         else:
             self.user_id = None
             self.user_name = None
-            self.order_model.clear()
+            self.model.clear()
             with QSignalBlocker(self.ui.cmbxSort), QSignalBlocker(self.ui.cmbxCats):
                 self.ui.cmbxSort.setCurrentIndex(0)
                 self.ui.cmbxCats.setCurrentIndex(0)
@@ -161,97 +161,85 @@ class Widget(QWidget):
             return
 
         queued_sizes = {
-            line.size_id: line.quantity
+            line["size"].id: line["amount"]
             for line in self.order_lines()
-            if line.product_id == tovar.tovar.id
+            if line["tovar"].id == tovar.tovar.id
         }
         self.info_window.show_info(tovar.tovar, tovar.discount, queued_sizes)
 
     def order_lines(self):
-        return [
-            self.order_model.item(row).data(Qt.ItemDataRole.UserRole)
-            for row in range(self.order_model.rowCount())
-        ]
+        return [self.model.item(row).data() for row in range(self.model.rowCount())]
 
-    def add_tovar(self, tovar: Product, size: Size, quantity: int, price: int):
+    def add_tovar(self, tovar: Product, size: Size, amount: int, price: float):
         info = self.info_window
-        if self.user_id is None or info is None or quantity < 1:
+        if self.user_id is None or info is None or amount < 1:
             return
 
         existing_row = None
         for row, line in enumerate(self.order_lines()):
-            if line.product_id == tovar.id and line.size_id == size.id:
+            if line["tovar"].id == tovar.id and line["size"].id == size.id:
                 existing_row = row
-                quantity += line.quantity
+                amount += line["amount"]
                 break
 
-        line = OrderLine(
-            product_id=tovar.id,
-            size_id=size.id,
-            product_name=tovar.name,
-            size_title=size.title,
-            quantity=quantity,
-            unit_price=price,
-        )
-        text = f"{tovar.name}\nРазмер {size.title} · {quantity} шт."
+        text = f"{tovar.name}\nРазмер {size.title} · {amount} шт."
         item = QStandardItem(text)
         item.setToolTip(text)
         item.setEditable(False)
-        item.setData(line, Qt.ItemDataRole.UserRole)
+        item.setData({"tovar": tovar, "size": size, "amount": amount, "price": price})
         if existing_row is None:
-            self.order_model.appendRow(item)
+            self.model.appendRow(item)
         else:
-            self.order_model.setItem(existing_row, item)
+            self.model.setItem(existing_row, item)
         info.close()
 
     def update_order_button(self):
-        self.ui.btnOrder.setEnabled(self.user_id is not None and self.order_model.rowCount() > 0)
+        self.ui.btnOrder.setEnabled(self.user_id is not None and self.model.rowCount() > 0)
 
     def create_order(self):
-        if self.user_id is None or self.order_model.rowCount() == 0:
+        if self.user_id is None or self.model.rowCount() == 0:
             return
 
-        try:
-            with Session(engine) as db:
-                # Создаём новый заказ.
-                new_order = Order(
-                    code=next_order_code(db),
-                    order_date=date.today(),
-                    user_id=self.user_id,
+        with Session(engine) as db:
+            # Создаём новый заказ.
+            new_order = Order(
+                code=next_order_code(db),
+                order_date=date.today(),
+                user_id=self.user_id,
+            )
+            db.add(new_order)
+            db.flush()  # Получаем ID нового заказа.
+
+            # Перебираем позиции в корзине.
+            for row in range(self.model.rowCount()):
+                item = self.model.item(row)
+                data = item.data()
+                tovar = data["tovar"]
+                size = data["size"]
+                count = data["amount"]
+                cost = data["price"]
+
+                message = take_stock(db, tovar, size, count)
+                if message:
+                    db.rollback()
+                    QMessageBox.warning(self, "Недостаточно товара", message)
+                    self.load_tovars()
+                    return
+
+                # Добавляем позицию к заказу.
+                order_item = Product_tovar(
+                    order_id=new_order.id,
+                    product_id=tovar.id,
+                    size_id=size.id,
+                    count=count,
+                    price=int(cost),
                 )
-                db.add(new_order)
-                db.flush()  # Получаем ID нового заказа.
+                db.add(order_item)
 
-                # Перебираем позиции в корзине.
-                for row in range(self.order_model.rowCount()):
-                    item = self.order_model.item(row)
-                    line = item.data(Qt.ItemDataRole.UserRole)
-                    tovar_id = line.product_id
-                    size_id = line.size_id
-                    count = line.quantity
-                    cost = line.unit_price
-
-                    take_stock(db, line)
-                    order_item = Product_tovar(
-                        order_id=new_order.id,
-                        product_id=tovar_id,
-                        size_id=size_id,
-                        count=count,
-                        price=cost,
-                    )
-                    db.add(order_item)
-
-                db.commit()
-        except StockUnavailableError as error:
-            QMessageBox.warning(self, "Недостаточно товара", str(error))
-            self.load_tovars()
-            return
-        except SQLAlchemyError:
-            QMessageBox.warning(self, "Заказ", "Не удалось сохранить заказ. Попробуйте ещё раз.")
-            return
+            db.commit()
 
         QMessageBox.information(self, "Успех", "Заказ успешно оформлен!")
-        self.order_model.clear()
+        self.model.clear()
         self.load_tovars()
 
 
