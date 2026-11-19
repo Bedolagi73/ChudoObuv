@@ -4,15 +4,15 @@ from datetime import date, timedelta
 from PySide6.QtCore import QSignalBlocker, QSize, Qt
 from PySide6.QtGui import QFont, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QApplication, QDialog, QListWidgetItem, QMessageBox, QWidget
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text, tuple_
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, lazyload
 
 from info import Info
 from login_dialog import LoginDialog
-from models import Cathegory, Order, Product, Product_tovar, Size, engine
+from models import Cathegory, Order, Product, Product_tovar, Size, Stock, engine
 from order_dialog import OrderDialog
-from orders import OrderLine, StockUnavailableError, save_order
+from orders import OrderLine, StockUnavailableError
 from tovar import Tovar
 from ui_form import Ui_Widget
 
@@ -174,7 +174,7 @@ class Widget(QWidget):
             for row in range(self.order_model.rowCount())
         ]
 
-    def add_tovar(self, tovar: Product, size: Size, quantity: int):
+    def add_tovar(self, tovar: Product, size: Size, quantity: int, price: int):
         info = self.info_window
         if self.user_id is None or info is None or quantity < 1:
             return
@@ -192,7 +192,7 @@ class Widget(QWidget):
             product_name=tovar.name,
             size_title=size.title,
             quantity=quantity,
-            unit_price=info.price,
+            unit_price=price,
         )
         text = f"{tovar.name}\nРазмер {size.title} · {quantity} шт."
         item = QStandardItem(text)
@@ -218,8 +218,49 @@ class Widget(QWidget):
         if result != QDialog.DialogCode.Accepted or self.order_model.rowCount() == 0:
             return
 
+        lines = self.order_lines()
         try:
-            code, order_date = save_order(engine, self.user_id, self.order_lines())
+            with Session(engine) as db:
+                if db.get_bind().dialect.name == "postgresql":
+                    # Записываем новый номер заказа по очереди с другими сессиями.
+                    db.execute(text("LOCK TABLE orders IN SHARE ROW EXCLUSIVE MODE"))
+
+                code = db.scalar(select(func.coalesce(func.max(Order.code), 0))) + 1
+                order_date = date.today()
+                new_order = Order(code=code, order_date=order_date, user_id=self.user_id)
+                db.add(new_order)
+                db.flush()  # Получаем ID заказа в текущей транзакции.
+
+                keys = {(line.product_id, line.size_id) for line in lines}
+                stock_query = (
+                    select(Stock)
+                    .options(lazyload(Stock.size))
+                    .where(tuple_(Stock.product_id, Stock.size_id).in_(keys))
+                    .with_for_update(of=Stock)
+                )
+                stock = {(row.product_id, row.size_id): row for row in db.scalars(stock_query)}
+
+                for line in lines:
+                    row = stock.get((line.product_id, line.size_id))
+                    available = (row.amount or 0) if row is not None else 0
+                    if available < line.quantity:
+                        raise StockUnavailableError(
+                            f"«{line.product_name}», размер {line.size_title}. "
+                            f"Запрошено {line.quantity}, в наличии {max(available, 0)}."
+                        )
+
+                    db.add(
+                        Product_tovar(
+                            order_id=new_order.id,
+                            product_id=line.product_id,
+                            size_id=line.size_id,
+                            count=line.quantity,
+                            price=line.unit_price,
+                        )
+                    )
+                    row.amount -= line.quantity
+
+                db.commit()
         except StockUnavailableError as error:
             QMessageBox.warning(self, "Недостаточно товара", str(error))
             self.load_tovars()

@@ -14,7 +14,7 @@ AVAILABLE_AMOUNT_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 class Info(QWidget):
-    add = Signal(Product, Size, int)
+    add = Signal(Product, Size, int, int)
 
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Window)
@@ -93,4 +93,4 @@ class Info(QWidget):
         size = self.ui.cmbxSizes.currentData()
         quantity = self.ui.spinQuantity.value()
         if self.tovar is not None and size is not None and quantity > 0:
-            self.add.emit(self.tovar, size, quantity)
+            self.add.emit(self.tovar, size, quantity, self.price)
