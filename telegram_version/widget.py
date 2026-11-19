@@ -4,14 +4,13 @@ from datetime import date, timedelta
 from PySide6.QtCore import QSignalBlocker, QSize, Qt
 from PySide6.QtGui import QFont, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QApplication, QDialog, QListWidgetItem, QMessageBox, QWidget
-from sqlalchemy import func, or_, select, text, tuple_
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, lazyload
 
 from info import Info
 from login_dialog import LoginDialog
 from models import Cathegory, Order, Product, Product_tovar, Size, Stock, engine
-from order_dialog import OrderDialog
 from orders import OrderLine, StockUnavailableError
 from tovar import Tovar
 from ui_form import Ui_Widget
@@ -212,13 +211,6 @@ class Widget(QWidget):
         if self.user_id is None or self.order_model.rowCount() == 0:
             return
 
-        dialog = OrderDialog(self.order_model, self)
-        result = dialog.exec()
-        dialog.deleteLater()
-        if result != QDialog.DialogCode.Accepted or self.order_model.rowCount() == 0:
-            return
-
-        lines = self.order_lines()
         try:
             with Session(engine) as db:
                 if db.get_bind().dialect.name == "postgresql":
@@ -226,23 +218,21 @@ class Widget(QWidget):
                     db.execute(text("LOCK TABLE orders IN SHARE ROW EXCLUSIVE MODE"))
 
                 code = db.scalar(select(func.coalesce(func.max(Order.code), 0))) + 1
-                order_date = date.today()
-                new_order = Order(code=code, order_date=order_date, user_id=self.user_id)
+                new_order = Order(code=code, order_date=date.today(), user_id=self.user_id)
                 db.add(new_order)
                 db.flush()  # Получаем ID заказа в текущей транзакции.
 
-                keys = {(line.product_id, line.size_id) for line in lines}
-                stock_query = (
-                    select(Stock)
-                    .options(lazyload(Stock.size))
-                    .where(tuple_(Stock.product_id, Stock.size_id).in_(keys))
-                    .with_for_update(of=Stock)
-                )
-                stock = {(row.product_id, row.size_id): row for row in db.scalars(stock_query)}
-
-                for line in lines:
-                    row = stock.get((line.product_id, line.size_id))
-                    available = (row.amount or 0) if row is not None else 0
+                # Перебираем позиции в корзине.
+                for row in range(self.order_model.rowCount()):
+                    item = self.order_model.item(row)
+                    line = item.data(Qt.ItemDataRole.UserRole)
+                    stock = db.get(
+                        Stock,
+                        (line.product_id, line.size_id),
+                        options=[lazyload(Stock.size)],
+                        with_for_update={"of": Stock},
+                    )
+                    available = (stock.amount or 0) if stock is not None else 0
                     if available < line.quantity:
                         raise StockUnavailableError(
                             f"«{line.product_name}», размер {line.size_title}. "
@@ -258,7 +248,7 @@ class Widget(QWidget):
                             price=line.unit_price,
                         )
                     )
-                    row.amount -= line.quantity
+                    stock.amount -= line.quantity
 
                 db.commit()
         except StockUnavailableError as error:
@@ -269,11 +259,9 @@ class Widget(QWidget):
             QMessageBox.warning(self, "Заказ", "Не удалось сохранить заказ. Попробуйте ещё раз.")
             return
 
+        QMessageBox.information(self, "Успех", "Заказ успешно оформлен!")
         self.order_model.clear()
         self.load_tovars()
-        QMessageBox.information(
-            self, "Заказ оформлен", f"Заказ №{code} оформлен {order_date:%d.%m.%Y}."
-        )
 
 
 if __name__ == "__main__":
