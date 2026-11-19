@@ -4,14 +4,14 @@ from datetime import date, timedelta
 from PySide6.QtCore import QSignalBlocker, QSize, Qt
 from PySide6.QtGui import QFont, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QApplication, QDialog, QListWidgetItem, QMessageBox, QWidget
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, lazyload
+from sqlalchemy.orm import Session
 
 from info import Info
 from login_dialog import LoginDialog
-from models import Cathegory, Order, Product, Product_tovar, Size, Stock, engine
-from orders import OrderLine, StockUnavailableError
+from models import Cathegory, Order, Product, Product_tovar, Size, engine
+from orders import OrderLine, StockUnavailableError, next_order_code, take_stock
 from tovar import Tovar
 from ui_form import Ui_Widget
 
@@ -213,42 +213,33 @@ class Widget(QWidget):
 
         try:
             with Session(engine) as db:
-                if db.get_bind().dialect.name == "postgresql":
-                    # Записываем новый номер заказа по очереди с другими сессиями.
-                    db.execute(text("LOCK TABLE orders IN SHARE ROW EXCLUSIVE MODE"))
-
-                code = db.scalar(select(func.coalesce(func.max(Order.code), 0))) + 1
-                new_order = Order(code=code, order_date=date.today(), user_id=self.user_id)
+                # Создаём новый заказ.
+                new_order = Order(
+                    code=next_order_code(db),
+                    order_date=date.today(),
+                    user_id=self.user_id,
+                )
                 db.add(new_order)
-                db.flush()  # Получаем ID заказа в текущей транзакции.
+                db.flush()  # Получаем ID нового заказа.
 
                 # Перебираем позиции в корзине.
                 for row in range(self.order_model.rowCount()):
                     item = self.order_model.item(row)
                     line = item.data(Qt.ItemDataRole.UserRole)
-                    stock = db.get(
-                        Stock,
-                        (line.product_id, line.size_id),
-                        options=[lazyload(Stock.size)],
-                        with_for_update={"of": Stock},
-                    )
-                    available = (stock.amount or 0) if stock is not None else 0
-                    if available < line.quantity:
-                        raise StockUnavailableError(
-                            f"«{line.product_name}», размер {line.size_title}. "
-                            f"Запрошено {line.quantity}, в наличии {max(available, 0)}."
-                        )
+                    tovar_id = line.product_id
+                    size_id = line.size_id
+                    count = line.quantity
+                    cost = line.unit_price
 
-                    db.add(
-                        Product_tovar(
-                            order_id=new_order.id,
-                            product_id=line.product_id,
-                            size_id=line.size_id,
-                            count=line.quantity,
-                            price=line.unit_price,
-                        )
+                    take_stock(db, line)
+                    order_item = Product_tovar(
+                        order_id=new_order.id,
+                        product_id=tovar_id,
+                        size_id=size_id,
+                        count=count,
+                        price=cost,
                     )
-                    stock.amount -= line.quantity
+                    db.add(order_item)
 
                 db.commit()
         except StockUnavailableError as error:
