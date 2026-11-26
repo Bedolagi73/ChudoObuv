@@ -3,16 +3,16 @@ from datetime import date
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSpinBox, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QHeaderView, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QScrollArea,
+    QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from auth import find_user
-from models import Product, Size, Stock
-from orders import OrderError, PricesChanged, format_price, get_prices, save_order
+from auth import find_user, is_customer
+from models import Order, Product, Size, Stock, User
+from orders import OrderError, PricesChanged, add_to_cart, delete_order, format_price, get_prices, save_order
 from tovar import load_photo
 
 
@@ -80,6 +80,7 @@ class Info(QDialog):
         self.database = database
         self.cart = cart
         self.user = None
+        self.can_order = False
         self.setWindowTitle('Карточка товара')
         self.resize(640, 485)
         layout = QVBoxLayout(self)
@@ -128,10 +129,10 @@ class Info(QDialog):
         layout.addWidget(actions)
         self.size.currentIndexChanged.connect(self.change_amount)
 
-    def show_info(self, tovar, user):
+    def show_info(self, product_id, user, *, allow_order=True):
         try:
             with Session(self.database) as db:
-                current = db.get(Product, tovar.id)
+                current = db.get(Product, product_id)
                 if current is not None:
                     prices = get_prices(db, {current.id: current.price}, date.today())
         except SQLAlchemyError:
@@ -143,6 +144,7 @@ class Info(QDialog):
             return
         self.tovar = current
         self.user = user
+        self.can_order = user is not None and allow_order
         self.price = prices[current.id]
         self.fill()
         self.exec()
@@ -189,13 +191,15 @@ class Info(QDialog):
                 self.size.addItem(size.title, size)
 
         has_sizes = self.size.count() > 1
-        can_order = self.user is not None and has_sizes
+        can_order = self.can_order and has_sizes
         self.size.setEnabled(can_order)
         self.quantity.setValue(1)
         self.change_amount()
         self.notice.setVisible(not can_order)
         if self.user is None:
             self.notice.setText('Войдите, чтобы добавить товар в заказ.')
+        elif not self.can_order:
+            self.notice.setText('Для оформления откройте «Заказы».')
         elif any(stock.values()):
             self.notice.setText('Доступные пары уже добавлены в заказ.')
         else:
@@ -205,14 +209,14 @@ class Info(QDialog):
 
     def change_amount(self):
         size = self.size.currentData()
-        chosen = self.user is not None and size is not None
+        chosen = self.can_order and size is not None
         self.quantity.setRange(0, self.available[size.id] if chosen else 1)
         self.quantity.setEnabled(chosen)
         self.add_button.setEnabled(chosen)
 
     def add_tovar(self):
         size = self.size.currentData()
-        if self.user is None or size is None:
+        if not self.can_order or size is None:
             return
         amount = self.quantity.value()
         if amount <= 0:
@@ -275,7 +279,7 @@ class CartDialog(QDialog):
         self.confirm = actions.addButton('Подтвердить заказ', QDialogButtonBox.ButtonRole.AcceptRole)
         self.confirm.setProperty('primary', True)
         self.confirm.setAutoDefault(False)
-        actions.addButton('Продолжить покупки', QDialogButtonBox.ButtonRole.RejectRole)
+        self.cancel = actions.addButton('Продолжить покупки', QDialogButtonBox.ButtonRole.RejectRole)
         actions.accepted.connect(self.save)
         actions.rejected.connect(self.reject)
         layout.addWidget(actions)
@@ -322,3 +326,168 @@ class CartDialog(QDialog):
             self.message.setText('Не удалось сохранить заказ. Проверьте подключение к базе.')
         else:
             self.accept()
+
+
+class NewOrderDialog(CartDialog):
+    def __init__(self, database, user, parent=None):
+        super().__init__(database, None, {}, parent)
+        self.user = user
+        self.setWindowTitle('Новый заказ')
+        self.resize(720, 620)
+        self.cancel.setText('Отмена')
+
+        self.customer = QComboBox()
+        self.customer.addItem('Выберите клиента')
+        self.search = QLineEdit()
+        self.search.setClearButtonEnabled(True)
+        fields = QFormLayout()
+        fields.addRow('&Клиент', self.customer)
+        fields.addRow('&Поиск по названию', self.search)
+        self.layout().insertLayout(0, fields)
+        self.catalog = QListWidget()
+        self.catalog.setAccessibleName('Каталог товаров')
+        self.layout().insertWidget(1, self.catalog)
+        self.open_product = QPushButton('Открыть товар')
+        self.open_product.setAutoDefault(False)
+        self.layout().insertWidget(2, self.open_product)
+
+        with Session(database) as db:
+            for customer in db.query(User).order_by(User.surname, User.name, User.id):
+                if is_customer(customer):
+                    self.customer.addItem(str(customer), customer.id)
+            self.products = db.execute(select(Product.id, Product.name).order_by(Product.name, Product.id)).all()
+
+        self.info = Info(database, self.cart, self)
+        self.info.add.connect(self.add_product)
+        self.search.textChanged.connect(self.filter_catalog)
+        self.catalog.currentItemChanged.connect(self.update_product_button)
+        self.catalog.itemActivated.connect(self.show_product)
+        self.open_product.clicked.connect(self.show_product)
+        self.filter_catalog()
+
+    def filter_catalog(self):
+        search = self.search.text().strip().casefold()
+        self.catalog.clear()
+        for product_id, name in self.products:
+            if search in name.casefold():
+                item = QListWidgetItem(name, self.catalog)
+                item.setData(Qt.ItemDataRole.UserRole, product_id)
+        self.catalog.setCurrentRow(0)
+        self.update_product_button()
+
+    def update_product_button(self):
+        self.open_product.setEnabled(self.catalog.currentItem() is not None)
+
+    def show_product(self):
+        item = self.catalog.currentItem()
+        if item is not None:
+            self.info.show_info(item.data(Qt.ItemDataRole.UserRole), self.user)
+
+    def add_product(self, product, size, quantity):
+        add_to_cart(self.cart, product, size, quantity, self.info.price)
+        self.message.clear()
+        self.fill()
+
+    def save(self):
+        self.user_id = self.customer.currentData()
+        if self.user_id is None:
+            self.message.setText('Выберите клиента.')
+            self.customer.setFocus()
+            return
+        super().save()
+
+
+class OrdersDialog(QDialog):
+    def __init__(self, database, user, parent=None):
+        super().__init__(parent)
+        self.database = database
+        self.user = user
+        self.changed = False
+        self.setWindowTitle('Заказы')
+        self.resize(660, 420)
+        layout = QVBoxLayout(self)
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels(['№', 'Дата заказа', 'ФИО клиента'])
+        self.table.setAccessibleName('Список заказов')
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.verticalHeader().hide()
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setStretchLastSection(True)
+        layout.addWidget(self.table)
+        self.message = make_label()
+        layout.addWidget(self.message)
+
+        actions = QDialogButtonBox()
+        self.add_button = actions.addButton('Добавить заказ', QDialogButtonBox.ButtonRole.ActionRole)
+        self.add_button.setProperty('primary', True)
+        self.remove_button = actions.addButton('Удалить заказ', QDialogButtonBox.ButtonRole.ActionRole)
+        self.remove_button.setEnabled(False)
+        actions.addButton('Закрыть', QDialogButtonBox.ButtonRole.RejectRole)
+        actions.rejected.connect(self.reject)
+        self.add_button.clicked.connect(self.add_order)
+        self.remove_button.clicked.connect(self.remove_order)
+        self.table.itemSelectionChanged.connect(self.update_remove)
+        layout.addWidget(actions)
+        self.load_orders()
+
+    def load_orders(self):
+        try:
+            with Session(self.database) as db:
+                orders = db.execute(
+                    select(Order.id, Order.order_date, User.surname, User.name, User.patronymic)
+                    .join(User, Order.user_id == User.id).order_by(Order.order_date.desc(), Order.id.desc())
+                ).all()
+        except SQLAlchemyError:
+            self.message.setText('Не удалось загрузить список заказов.')
+            return False
+
+        self.table.clearContents()
+        self.table.setRowCount(len(orders))
+        for row, (order_id, order_date, *name) in enumerate(orders):
+            for column, value in enumerate((str(order_id), order_date.strftime('%d.%m.%Y'), ' '.join(filter(None, name)))):
+                self.table.setItem(row, column, QTableWidgetItem(value))
+        self.message.setText('' if orders else 'Заказов пока нет.')
+        self.update_remove()
+        return True
+
+    def update_remove(self):
+        self.remove_button.setEnabled(bool(self.table.selectedItems()))
+
+    def add_order(self):
+        try:
+            dialog = NewOrderDialog(self.database, self.user, self)
+        except SQLAlchemyError:
+            self.message.setText('Не удалось загрузить клиентов и товары.')
+            return
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        order = dialog.order
+        dialog.deleteLater()
+        if accepted:
+            self.changed = True
+            if self.load_orders():
+                self.message.setText(f'Заказ №{order[0]} оформлен.')
+
+    def remove_order(self):
+        item = self.table.item(self.table.currentRow(), 0)
+        if item is None:
+            return
+        order_id = int(item.text())
+        answer = QMessageBox.question(self, 'Удаление заказа', f'Удалить заказ №{order_id} и вернуть пары на склад?',
+                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                      QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            delete_order(self.database, order_id)
+        except OrderError as error:
+            self.load_orders()
+            self.message.setText(str(error))
+        except SQLAlchemyError:
+            self.message.setText('Не удалось удалить заказ.')
+        else:
+            self.changed = True
+            if self.load_orders():
+                self.message.setText(f'Заказ №{order_id} удалён.')

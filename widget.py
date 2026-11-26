@@ -5,13 +5,14 @@ from PySide6.QtWidgets import (QApplication, QDialog, QFrame, QHBoxLayout, QLabe
                                QListWidgetItem, QMessageBox, QPushButton, QWidget)
 from ui_form import Ui_Widget
 from PySide6.QtGui import QFont, QIcon, QPixmap, QStandardItem, QStandardItemModel
-from PySide6.QtCore import QSize, Qt, QTimer
+from PySide6.QtCore import QSize, QSignalBlocker, Qt, QTimer
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from auth import can_manage_orders, is_customer
 from models import engine, Product, Cathegory, Subcathegory, DatabaseConfigError, ENV_FILE, config_error
-from order_dialogs import CartDialog, Info, LoginDialog
-from orders import CartItem, get_prices
+from order_dialogs import CartDialog, Info, LoginDialog, OrdersDialog
+from orders import add_to_cart, get_prices
 from tovar import BASE_DIR, Tovar
 
 IMPORT_DIR = BASE_DIR / 'import'
@@ -83,27 +84,34 @@ class Widget(QWidget):
         self.login_button = QPushButton()
         self.login_button.clicked.connect(self.change_user)
         header.addWidget(self.login_button)
-        self.cart_button = QPushButton()
+        self.cart_button = self.ui.cartButton
         self.cart_button.setProperty('primary', True)
         self.cart_button.clicked.connect(self.open_cart)
-        header.addWidget(self.cart_button)
+        self.ui.ordersButton.clicked.connect(self.open_orders)
         self.ui.gridLayout.addWidget(bar, 0, 0, 1, 2)
 
         self.open_button = QPushButton('Открыть товар')
         self.open_button.clicked.connect(self.show_selected)
         order_index = self.ui.controlsLayout.indexOf(self.ui.orderLabel)
         self.ui.controlsLayout.insertWidget(order_index, self.open_button)
+        self.ui.controlsLayout.setStretchFactor(self.ui.listOrder, 1)
+        self.ui.controlsLayout.addStretch()
         self.ui.listWidget.itemClicked.connect(self.showInfo)
+        self.ui.listWidget.itemActivated.connect(self.showInfo)
         self.ui.listWidget.currentItemChanged.connect(self.update_buttons)
         self.update_buttons()
 
     def update_buttons(self):
         logged_in = self.user is not None
+        customer = is_customer(self.user)
         self.account.setText(str(self.user) if logged_in else 'Гость')
         self.login_button.setText('Выйти' if logged_in else 'Войти')
-        self.cart_button.setText(f'Заказ ({sum(line.quantity for line in self.cart.values())})')
-        self.cart_button.setEnabled(logged_in)
-        self.ui.listOrder.setEnabled(logged_in)
+        self.ui.controlsFrame.setEnabled(logged_in)
+        self.cart_button.setText(f'Оформить заказ ({sum(line.quantity for line in self.cart.values())})')
+        self.cart_button.setVisible(customer)
+        self.ui.orderLabel.setVisible(customer)
+        self.ui.listOrder.setVisible(customer)
+        self.ui.ordersButton.setVisible(can_manage_orders(self.user))
         self.open_button.setEnabled(self.ui.listWidget.currentItem() is not None)
 
     def change_user(self):
@@ -118,6 +126,11 @@ class Widget(QWidget):
                     return
             self.user = None
             self.cart.clear()
+            with QSignalBlocker(self.ui.comboBox), QSignalBlocker(self.ui.categoryComboBox), QSignalBlocker(self.ui.lineEdit):
+                self.ui.comboBox.setCurrentIndex(0)
+                self.ui.categoryComboBox.setCurrentIndex(0)
+                self.ui.lineEdit.clear()
+            self.load_tovars()
         else:
             dialog = LoginDialog(engine, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -138,17 +151,14 @@ class Widget(QWidget):
             self.info_window.missing.connect(self.load_tovars)
         tovar = self.ui.listWidget.itemWidget(item)
         if tovar:
-            self.info_window.show_info(tovar.tovar, self.user)
+            self.info_window.show_info(tovar.tovar.id, self.user, allow_order=is_customer(self.user))
 
     showInfo = show_info
 
     def add_tovar(self, tovar, size, amount):
-        key = (tovar.id, size.id)
-        if key in self.cart:
-            amount += self.cart[key].quantity
-        price = self.info_window.price
-        self.cart[key] = CartItem(tovar.id, size.id, tovar.name, size.title, price, amount)
-        self.load_order()
+        if is_customer(self.user):
+            add_to_cart(self.cart, tovar, size, amount, self.info_window.price)
+            self.load_order()
 
     def load_order(self):
         self.model.clear()
@@ -161,7 +171,7 @@ class Widget(QWidget):
         self.update_buttons()
 
     def open_cart(self):
-        if self.user is None:
+        if not is_customer(self.user):
             return
         dialog = CartDialog(engine, self.user.id, self.cart, self)
         dialog.changed.connect(self.load_order)
@@ -174,6 +184,15 @@ class Widget(QWidget):
             self.load_order()
             self.load_tovars()
             QMessageBox.information(self, 'Заказ оформлен', f'Заказ №{order_id} от {order_date:%d.%m.%Y}')
+
+    def open_orders(self):
+        if not can_manage_orders(self.user):
+            return
+        dialog = OrdersDialog(engine, self.user, self)
+        dialog.exec()
+        if dialog.changed:
+            self.load_tovars()
+        dialog.deleteLater()
 
     def load_tovars(self, *, startup=False):
         self.search_timer.stop()

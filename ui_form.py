@@ -15,10 +15,10 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QFont, QFontDatabase, QGradient, QIcon,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QGridLayout,
-    QLabel, QLineEdit, QListView, QListWidget,
-    QListWidgetItem, QSizePolicy, QSpacerItem, QVBoxLayout,
-    QWidget)
+from PySide6.QtWidgets import (QAbstractItemView, QApplication, QComboBox, QFrame,
+    QGridLayout, QLabel, QLineEdit, QListView,
+    QListWidget, QListWidgetItem, QPushButton, QSizePolicy,
+    QSpacerItem, QVBoxLayout, QWidget)
 
 class Ui_Widget(object):
     def setupUi(self, Widget):
@@ -36,45 +36,49 @@ class Ui_Widget(object):
 
         self.gridLayout.addWidget(self.label, 0, 1, 1, 1)
 
-        self.controlsLayout = QVBoxLayout()
+        self.controlsFrame = QFrame(Widget)
+        self.controlsFrame.setObjectName(u"controlsFrame")
+        self.controlsFrame.setEnabled(False)
+        self.controlsLayout = QVBoxLayout(self.controlsFrame)
         self.controlsLayout.setObjectName(u"controlsLayout")
-        self.sortLabel = QLabel(Widget)
+        self.controlsLayout.setContentsMargins(0, 0, 0, 0)
+        self.sortLabel = QLabel(self.controlsFrame)
         self.sortLabel.setObjectName(u"sortLabel")
 
         self.controlsLayout.addWidget(self.sortLabel)
 
-        self.comboBox = QComboBox(Widget)
+        self.comboBox = QComboBox(self.controlsFrame)
         self.comboBox.setObjectName(u"comboBox")
 
         self.controlsLayout.addWidget(self.comboBox)
 
-        self.filterLabel = QLabel(Widget)
+        self.filterLabel = QLabel(self.controlsFrame)
         self.filterLabel.setObjectName(u"filterLabel")
 
         self.controlsLayout.addWidget(self.filterLabel)
 
-        self.categoryComboBox = QComboBox(Widget)
+        self.categoryComboBox = QComboBox(self.controlsFrame)
         self.categoryComboBox.setObjectName(u"categoryComboBox")
 
         self.controlsLayout.addWidget(self.categoryComboBox)
 
-        self.searchLabel = QLabel(Widget)
+        self.searchLabel = QLabel(self.controlsFrame)
         self.searchLabel.setObjectName(u"searchLabel")
 
         self.controlsLayout.addWidget(self.searchLabel)
 
-        self.lineEdit = QLineEdit(Widget)
+        self.lineEdit = QLineEdit(self.controlsFrame)
         self.lineEdit.setObjectName(u"lineEdit")
         self.lineEdit.setClearButtonEnabled(True)
 
         self.controlsLayout.addWidget(self.lineEdit)
 
-        self.orderLabel = QLabel(Widget)
+        self.orderLabel = QLabel(self.controlsFrame)
         self.orderLabel.setObjectName(u"orderLabel")
 
         self.controlsLayout.addWidget(self.orderLabel)
 
-        self.listOrder = QListView(Widget)
+        self.listOrder = QListView(self.controlsFrame)
         self.listOrder.setObjectName(u"listOrder")
         sizePolicy = QSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
         sizePolicy.setHorizontalStretch(0)
@@ -88,8 +92,18 @@ class Ui_Widget(object):
 
         self.controlsLayout.addWidget(self.listOrder)
 
+        self.cartButton = QPushButton(self.controlsFrame)
+        self.cartButton.setObjectName(u"cartButton")
 
-        self.gridLayout.addLayout(self.controlsLayout, 1, 0, 1, 1)
+        self.controlsLayout.addWidget(self.cartButton)
+
+        self.ordersButton = QPushButton(self.controlsFrame)
+        self.ordersButton.setObjectName(u"ordersButton")
+
+        self.controlsLayout.addWidget(self.ordersButton)
+
+
+        self.gridLayout.addWidget(self.controlsFrame, 1, 0, 1, 1)
 
         self.listWidget = QListWidget(Widget)
         self.listWidget.setObjectName(u"listWidget")
@@ -106,7 +120,9 @@ class Ui_Widget(object):
         QWidget.setTabOrder(self.comboBox, self.categoryComboBox)
         QWidget.setTabOrder(self.categoryComboBox, self.lineEdit)
         QWidget.setTabOrder(self.lineEdit, self.listOrder)
-        QWidget.setTabOrder(self.listOrder, self.listWidget)
+        QWidget.setTabOrder(self.listOrder, self.cartButton)
+        QWidget.setTabOrder(self.cartButton, self.ordersButton)
+        QWidget.setTabOrder(self.ordersButton, self.listWidget)
 
         self.retranslateUi(Widget)
 
@@ -130,5 +146,7 @@ class Ui_Widget(object):
 #if QT_CONFIG(accessibility)
         self.listOrder.setAccessibleName(QCoreApplication.translate("Widget", u"\u041f\u043e\u0437\u0438\u0446\u0438\u0438 \u0437\u0430\u043a\u0430\u0437\u0430", None))
 #endif // QT_CONFIG(accessibility)
+        self.cartButton.setText(QCoreApplication.translate("Widget", u"\u041e\u0444\u043e\u0440\u043c\u0438\u0442\u044c \u0437\u0430\u043a\u0430\u0437", None))
+        self.ordersButton.setText(QCoreApplication.translate("Widget", u"\u0417\u0430\u043a\u0430\u0437\u044b", None))
     # retranslateUi
 

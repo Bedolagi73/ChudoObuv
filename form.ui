@@ -35,70 +35,87 @@
     </widget>
    </item>
    <item row="1" column="0">
-    <layout class="QVBoxLayout" name="controlsLayout">
-     <item>
-      <widget class="QLabel" name="sortLabel">
-       <property name="text"><string>Сортировка</string></property>
-       <property name="buddy"><cstring>comboBox</cstring></property>
-      </widget>
-     </item>
-     <item><widget class="QComboBox" name="comboBox"/></item>
-     <item>
-      <widget class="QLabel" name="filterLabel">
-       <property name="text"><string>Фильтрация</string></property>
-       <property name="buddy"><cstring>categoryComboBox</cstring></property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QComboBox" name="categoryComboBox">
-       <property name="accessibleName"><string>Фильтр по категории товара</string></property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QLabel" name="searchLabel">
-       <property name="text"><string>Поиск</string></property>
-       <property name="buddy"><cstring>lineEdit</cstring></property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QLineEdit" name="lineEdit">
-       <property name="accessibleName"><string>Поиск товаров</string></property>
-       <property name="placeholderText"><string>Название или описание</string></property>
-       <property name="clearButtonEnabled"><bool>true</bool></property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QLabel" name="orderLabel">
-       <property name="text"><string>Корзина</string></property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QListView" name="listOrder">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Ignored" vsizetype="Expanding">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="accessibleName"><string>Позиции заказа</string></property>
-       <property name="editTriggers">
-        <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
-       </property>
-       <property name="horizontalScrollBarPolicy">
-        <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
-       </property>
-       <property name="wordWrap"><bool>true</bool></property>
-       <property name="resizeMode"><enum>QListView::ResizeMode::Adjust</enum></property>
-      </widget>
-     </item>
-    </layout>
+    <widget class="QFrame" name="controlsFrame">
+     <property name="enabled"><bool>false</bool></property>
+     <layout class="QVBoxLayout" name="controlsLayout">
+      <property name="leftMargin"><number>0</number></property>
+      <property name="topMargin"><number>0</number></property>
+      <property name="rightMargin"><number>0</number></property>
+      <property name="bottomMargin"><number>0</number></property>
+      <item>
+       <widget class="QLabel" name="sortLabel">
+        <property name="text"><string>Сортировка</string></property>
+        <property name="buddy"><cstring>comboBox</cstring></property>
+       </widget>
+      </item>
+      <item><widget class="QComboBox" name="comboBox"/></item>
+      <item>
+       <widget class="QLabel" name="filterLabel">
+        <property name="text"><string>Фильтрация</string></property>
+        <property name="buddy"><cstring>categoryComboBox</cstring></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="categoryComboBox">
+        <property name="accessibleName"><string>Фильтр по категории товара</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="searchLabel">
+        <property name="text"><string>Поиск</string></property>
+        <property name="buddy"><cstring>lineEdit</cstring></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLineEdit" name="lineEdit">
+        <property name="accessibleName"><string>Поиск товаров</string></property>
+        <property name="placeholderText"><string>Название или описание</string></property>
+        <property name="clearButtonEnabled"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="orderLabel">
+        <property name="text"><string>Корзина</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QListView" name="listOrder">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Ignored" vsizetype="Expanding">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="accessibleName"><string>Позиции заказа</string></property>
+        <property name="editTriggers">
+         <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+        </property>
+        <property name="horizontalScrollBarPolicy">
+         <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
+        </property>
+        <property name="wordWrap"><bool>true</bool></property>
+        <property name="resizeMode"><enum>QListView::ResizeMode::Adjust</enum></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="cartButton">
+        <property name="text"><string>Оформить заказ</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="ordersButton">
+        <property name="text"><string>Заказы</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item row="1" column="1">
     <widget class="QListWidget" name="listWidget"/>
    </item>
   </layout>
  </widget>
- <tabstops><tabstop>comboBox</tabstop><tabstop>categoryComboBox</tabstop><tabstop>lineEdit</tabstop><tabstop>listOrder</tabstop><tabstop>listWidget</tabstop></tabstops>
+ <tabstops><tabstop>comboBox</tabstop><tabstop>categoryComboBox</tabstop><tabstop>lineEdit</tabstop><tabstop>listOrder</tabstop><tabstop>cartButton</tabstop><tabstop>ordersButton</tabstop><tabstop>listWidget</tabstop></tabstops>
  <resources/>
  <connections/>
 </ui>

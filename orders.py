@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
-from sqlalchemy import update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from models import Order, Product, Product_tovar, Stock, User
@@ -30,6 +30,13 @@ class CartItem:
     @property
     def total(self):
         return self.unit_price * self.quantity
+
+
+def add_to_cart(cart, product, size, quantity, price):
+    key = product.id, size.id
+    if key in cart:
+        quantity += cart[key].quantity
+    cart[key] = CartItem(product.id, size.id, product.name, size.title, price, quantity)
 
 
 def get_prices(db, base_prices, today):
@@ -112,3 +119,26 @@ def save_order(database, user_id, cart):
         order_id = order.id
         db.commit()
     return order_id, today
+
+
+def delete_order(database, order_id):
+    with Session(database) as db, db.begin():
+        if db.scalar(select(Order.id).where(Order.id == order_id).with_for_update()) is None:
+            raise OrderError('Заказ уже удалён.')
+
+        pair = (Product_tovar.product_id, Product_tovar.size_id)
+        lines = db.execute(select(*pair, func.count()).where(Product_tovar.order_id == order_id)
+                           .group_by(*pair).order_by(*pair)).all()
+        for product_id, size_id, quantity in lines:
+            stock_id = db.scalar(select(Stock.id).where(
+                Stock.product_id == product_id, Stock.size_id == size_id, Stock.amount >= 0,
+            ).order_by(Stock.id).limit(1).with_for_update())
+            if stock_id is None:
+                db.add(Stock(product_id=product_id, size_id=size_id, amount=quantity))
+            else:
+                db.execute(update(Stock).where(Stock.id == stock_id).values(amount=Stock.amount + quantity))
+
+        db.execute(delete(Product_tovar).where(Product_tovar.order_id == order_id))
+        result = db.execute(delete(Order).where(Order.id == order_id))
+        if result.rowcount != 1:
+            raise OrderError('Заказ уже удалён.')
