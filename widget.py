@@ -36,6 +36,7 @@ class Widget(QWidget):
         self.user = None
         self.cart = {}
         self.info_window = None
+        self.orders_window = None
         self.model = QStandardItemModel(self)
         self.ui.listOrder.setModel(self.model)
         self.make_buttons()
@@ -87,7 +88,7 @@ class Widget(QWidget):
         self.cart_button = self.ui.cartButton
         self.cart_button.setProperty('primary', True)
         self.cart_button.clicked.connect(self.open_cart)
-        self.ui.ordersButton.clicked.connect(self.open_orders)
+        self.ui.ordersButton.clicked.connect(self.show_orders)
         self.ui.gridLayout.addWidget(bar, 0, 0, 1, 2)
 
         self.open_button = QPushButton('Открыть товар')
@@ -185,14 +186,22 @@ class Widget(QWidget):
             self.load_tovars()
             QMessageBox.information(self, 'Заказ оформлен', f'Заказ №{order_id} от {order_date:%d.%m.%Y}')
 
-    def open_orders(self):
+    def show_orders(self):
         if not can_manage_orders(self.user):
             return
-        dialog = Orders(engine, self.user, self)
-        dialog.exec()
-        if dialog.changed:
+        if self.orders_window is None:
+            self.orders_window = Orders(engine, self.user, self)
+            self.orders_window.setWindowModality(Qt.WindowModality.WindowModal)
+            self.orders_window.finished.connect(self.orders_closed)
+        else:
+            self.orders_window.user = self.user
+            self.orders_window.load_orders()
+        self.orders_window.show()
+
+    def orders_closed(self):
+        if self.orders_window.changed:
+            self.orders_window.changed = False
             self.load_tovars()
-        dialog.deleteLater()
 
     def load_tovars(self, *, startup=False):
         self.search_timer.stop()
