@@ -9,7 +9,7 @@ from PySide6.QtCore import QSize, Qt, QTimer
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from models import Product, Cathegory, Subcathegory, DatabaseConfigError, ENV_FILE, make_engine
+from models import engine, Product, Cathegory, Subcathegory, DatabaseConfigError, ENV_FILE, config_error
 from order_dialogs import CartDialog, Info, LoginDialog
 from orders import CartItem, get_prices
 from tovar import BASE_DIR, Tovar
@@ -30,7 +30,6 @@ def set_style(app):
 class Widget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.engine = make_engine()
         self.ui = Ui_Widget()
         self.ui.setupUi(self)
         self.user = None
@@ -51,8 +50,11 @@ class Widget(QWidget):
         self.search_timer.setInterval(300)
         self.search_timer.timeout.connect(self.load_tovars)
         self.ui.lineEdit.textChanged.connect(lambda _text: self.search_timer.start())
+        if engine is None:
+            raise DatabaseConfigError(config_error)
+
         self.ui.categoryComboBox.addItem('Все категории', None)
-        with Session(self.engine) as db:
+        with Session(engine) as db:
             categories = db.query(Cathegory).order_by(Cathegory.title, Cathegory.id).all()
             for category in categories:
                 self.ui.categoryComboBox.addItem(category.title, category.id)
@@ -117,7 +119,7 @@ class Widget(QWidget):
             self.user = None
             self.cart.clear()
         else:
-            dialog = LoginDialog(self.engine, self)
+            dialog = LoginDialog(engine, self)
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.user = dialog.user
             dialog.deleteLater()
@@ -131,7 +133,7 @@ class Widget(QWidget):
             return
         # Окно создаём при первом открытии карточки.
         if self.info_window is None:
-            self.info_window = Info(self.engine, self.cart, self)
+            self.info_window = Info(engine, self.cart, self)
             self.info_window.add.connect(self.add_tovar)
             self.info_window.missing.connect(self.load_tovars)
         tovar = self.ui.listWidget.itemWidget(item)
@@ -161,7 +163,7 @@ class Widget(QWidget):
     def open_cart(self):
         if self.user is None:
             return
-        dialog = CartDialog(self.engine, self.user.id, self.cart, self)
+        dialog = CartDialog(engine, self.user.id, self.cart, self)
         dialog.changed.connect(self.load_order)
         accepted = dialog.exec() == QDialog.DialogCode.Accepted
         order = dialog.order
@@ -176,7 +178,7 @@ class Widget(QWidget):
     def load_tovars(self, *, startup=False):
         self.search_timer.stop()
         try:
-            with Session(self.engine) as db:
+            with Session(engine) as db:
                 query = db.query(Product)
                 category_id = self.ui.categoryComboBox.currentData()
                 if category_id is not None:
