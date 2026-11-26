@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload, lazyload
 
 from models import Order, Product, Product_tovar, Stock, User
+from order_info import OrderInfo
 
 
 class OrderError(ValueError):
@@ -156,6 +157,7 @@ class Orders(QDialog):
         self.database = database
         self.user = user
         self.changed = False
+        self.order_window = None
 
         self.ui = QUiLoader().load(str(Path(__file__).with_name('orders.ui')), self)
         self.setWindowTitle(self.ui.windowTitle())
@@ -172,6 +174,7 @@ class Orders(QDialog):
         self.table = self.ui.tblOrders
         self.table.setModel(self.model)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.table.clicked.connect(self.order_clicked)
 
         self.remove_action = QAction('Удалить заказ', self.table)
         self.remove_action.setShortcut(QKeySequence('Delete'))
@@ -194,10 +197,18 @@ class Orders(QDialog):
         self.model.removeRows(0, self.model.rowCount())
         for order in orders:
             id_item = QStandardItem(str(order.id))
-            id_item.setData(order)
+            id_item.setData(order, 256)
             self.model.appendRow([
                 id_item, QStandardItem(order.order_date.strftime('%d.%m.%Y')), QStandardItem(str(order.user)),
             ])
+
+    def order_clicked(self, index):
+        order = index.siblingAtColumn(0).data(256)
+        if order is None:
+            return
+        if self.order_window is None:
+            self.order_window = OrderInfo(self)
+        self.order_window.show_window(order)
 
     def add_order(self):
         from order_dialogs import NewOrderDialog
@@ -225,7 +236,7 @@ class Orders(QDialog):
         rows = self.table.selectionModel().selectedRows()
         if not rows:
             return
-        order_id = self.model.itemFromIndex(rows[0]).data().id
+        order_id = rows[0].data(256).id
         answer = QMessageBox.question(self, 'Удаление заказа', f'Удалить заказ №{order_id} и вернуть пары на склад?',
                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                                       QMessageBox.StandardButton.No)
