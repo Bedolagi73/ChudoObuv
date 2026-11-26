@@ -6,7 +6,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
-from models import (create, engine, Role, User, Cathegory, Subcathegory, Manufacturer,
+from models import (Base, make_engine, Role, User, Cathegory, Subcathegory, Manufacturer,
                     Size, Product, Stock, Order, Product_tovar)
 
 IMPORT_DIR = Path(__file__).resolve().parent / "import"
@@ -36,7 +36,8 @@ def to_date(value):
 
 
 def main():
-    create()
+    engine = make_engine()
+    Base.metadata.create_all(engine)
     with Session(engine) as db:
         if db.query(Role).first() is not None:
             print("В базе уже есть данные, загрузка пропущена.")

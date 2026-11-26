@@ -9,25 +9,29 @@ from sqlalchemy.orm import declarative_base, relationship
 from dotenv import load_dotenv
 
 ENV_FILE = Path(__file__).resolve().with_name('.env')
-load_dotenv(ENV_FILE, override=False, interpolate=False, encoding='utf-8-sig')
 
 
 class DatabaseConfigError(ValueError):
     pass
 
 
-engine = None
-config_error = 'Не задана DATABASE_URL. Скопируйте .env.example в .env рядом с models.py и укажите свою базу данных.'
-database_url = os.environ.get('DATABASE_URL', '').strip()
-if database_url:
+def make_engine():
+    load_dotenv(ENV_FILE, interpolate=False, encoding='utf-8-sig')
+    database_url = os.getenv('DATABASE_URL', '').strip()
+    if not database_url:
+        raise DatabaseConfigError(
+            'Не задана DATABASE_URL. Скопируйте .env.example в .env рядом с models.py и укажите свою базу данных.'
+        )
     try:
         url = make_url(database_url)
         if url.drivername == 'postgresql':
             url = url.set(drivername='postgresql+psycopg')
-        options = {'connect_timeout': 5} if url.get_backend_name() == 'postgresql' else {}
-        engine = create_engine(url, connect_args=options)
+        connect_args = {'connect_timeout': 5} if url.get_backend_name() == 'postgresql' else {}
+        return create_engine(url, connect_args=connect_args)
     except (ArgumentError, ValueError):
-        config_error = 'Некорректная DATABASE_URL. Проверьте формат подключения по образцу .env.example.'
+        raise DatabaseConfigError(
+            'Некорректная DATABASE_URL. Проверьте формат подключения по образцу .env.example.'
+        ) from None
 
 Base = declarative_base()
 
@@ -116,8 +120,3 @@ class Order(Base):
     user = relationship("User", lazy="joined")
     # состав заказа: строки order_items; каждая строка соответствует одной паре
     items = relationship("Product_tovar", lazy="selectin")
-
-def create():
-    if engine is None:
-        raise DatabaseConfigError(config_error)
-    Base.metadata.create_all(bind=engine)

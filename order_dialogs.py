@@ -6,11 +6,12 @@ from PySide6.QtWidgets import (
     QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSpinBox, QTableWidget,
     QTableWidgetItem, QVBoxLayout, QWidget,
 )
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from auth import find_user
-from models import Product, Size
+from models import Product, Size, Stock
 from orders import OrderError, PricesChanged, format_price, get_prices, save_order
 from tovar import load_photo
 
@@ -78,6 +79,7 @@ class Info(QDialog):
         super().__init__(parent)
         self.database = database
         self.cart = cart
+        self.user = None
         self.setWindowTitle('Карточка товара')
         self.resize(640, 485)
         layout = QVBoxLayout(self)
@@ -126,7 +128,7 @@ class Info(QDialog):
         layout.addWidget(actions)
         self.size.currentIndexChanged.connect(self.change_amount)
 
-    def show_info(self, tovar):
+    def show_info(self, tovar, user):
         try:
             with Session(self.database) as db:
                 current = db.get(Product, tovar.id)
@@ -140,6 +142,7 @@ class Info(QDialog):
             self.missing.emit()
             return
         self.tovar = current
+        self.user = user
         self.price = prices[current.id]
         self.fill()
         self.exec()
@@ -186,29 +189,51 @@ class Info(QDialog):
                 self.size.addItem(size.title, size)
 
         has_sizes = self.size.count() > 1
-        self.size.setEnabled(has_sizes)
+        can_order = self.user is not None and has_sizes
+        self.size.setEnabled(can_order)
         self.quantity.setValue(1)
         self.change_amount()
-        self.notice.setVisible(not has_sizes)
-        if any(stock.values()):
+        self.notice.setVisible(not can_order)
+        if self.user is None:
+            self.notice.setText('Войдите, чтобы добавить товар в заказ.')
+        elif any(stock.values()):
             self.notice.setText('Доступные пары уже добавлены в заказ.')
         else:
             self.notice.setText('Нет размеров в наличии.')
-        if has_sizes:
+        if can_order:
             self.size.setFocus()
 
     def change_amount(self):
         size = self.size.currentData()
-        chosen = size is not None
-        self.quantity.setRange(1, self.available[size.id] if chosen else 1)
+        chosen = self.user is not None and size is not None
+        self.quantity.setRange(0, self.available[size.id] if chosen else 1)
         self.quantity.setEnabled(chosen)
         self.add_button.setEnabled(chosen)
 
     def add_tovar(self):
         size = self.size.currentData()
-        if size is None:
+        if self.user is None or size is None:
             return
         amount = self.quantity.value()
+        if amount <= 0:
+            QMessageBox.warning(self, 'Количество товара', 'Введите количество товара!')
+            return
+
+        try:
+            with Session(self.database) as db:
+                stock = db.scalar(select(func.sum(Stock.amount)).where(
+                    Stock.product_id == self.tovar.id, Stock.size_id == size.id, Stock.amount > 0,
+                )) or 0
+        except SQLAlchemyError:
+            QMessageBox.warning(self, 'Количество товара', 'Не удалось проверить остаток на складе.')
+            return
+
+        added = self.cart.get((self.tovar.id, size.id))
+        available = max(stock - (added.quantity if added is not None else 0), 0)
+        if amount > available:
+            QMessageBox.warning(self, 'Количество товара', f'Максимально доступно для заказа: {available}')
+            return
+
         self.add.emit(self.tovar, size, amount)
         self.accept()
 
