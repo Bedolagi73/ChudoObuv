@@ -14,7 +14,7 @@ AVAILABLE_AMOUNT_ROLE = Qt.ItemDataRole.UserRole + 1
 
 
 class Info(QWidget):
-    add = Signal(Product, Size, int, int)
+    add = Signal(Product, Size, int, float)
 
     def __init__(self, parent=None):
         super().__init__(parent, Qt.WindowType.Window)

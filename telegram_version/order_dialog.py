@@ -56,14 +56,17 @@ class OrderDialog(QDialog):
         self.table.setRowCount(row_count)
         total = 0
         for row in range(row_count):
-            line = self.order_model.item(row).data(Qt.ItemDataRole.UserRole)
-            total += line.total
+            line = self.order_model.item(row).data()
+            price = line["price"]
+            amount = line["amount"]
+            line_total = price * amount
+            total += line_total
             columns = (
-                line.product_name,
-                line.size_title,
-                str(line.quantity),
-                f"{Tovar.format_price(line.unit_price)} ₽",
-                f"{Tovar.format_price(line.total)} ₽",
+                line["tovar"].name,
+                line["size"].title,
+                str(amount),
+                f"{Tovar.format_price(price)} ₽",
+                f"{Tovar.format_price(line_total)} ₽",
             )
             for column, value in enumerate(columns):
                 self.table.setItem(row, column, QTableWidgetItem(value))
