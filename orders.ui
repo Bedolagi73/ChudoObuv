@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Orders</class>
+ <widget class="QWidget" name="Orders">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>600</width>
+    <height>470</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Заказы</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin"><number>10</number></property>
+   <property name="topMargin"><number>10</number></property>
+   <property name="rightMargin"><number>10</number></property>
+   <property name="bottomMargin"><number>10</number></property>
+   <item>
+    <widget class="QFrame" name="frame">
+     <layout class="QHBoxLayout" name="horizontalLayout" stretch="1,1">
+      <item>
+       <widget class="QPushButton" name="btnBack">
+        <property name="text"><string>Назад</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnAddOrder">
+        <property name="text"><string>Добавить заказ</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QTableView" name="tblOrders">
+     <property name="accessibleName"><string>Список заказов</string></property>
+     <property name="editTriggers"><set>QAbstractItemView::EditTrigger::NoEditTriggers</set></property>
+     <property name="selectionMode"><enum>QAbstractItemView::SelectionMode::SingleSelection</enum></property>
+     <property name="selectionBehavior"><enum>QAbstractItemView::SelectionBehavior::SelectRows</enum></property>
+     <attribute name="verticalHeaderVisible"><bool>false</bool></attribute>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <tabstops>
+  <tabstop>btnBack</tabstop>
+  <tabstop>btnAddOrder</tabstop>
+  <tabstop>tblOrders</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>

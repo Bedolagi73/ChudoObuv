@@ -1,9 +1,15 @@
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QKeySequence, QStandardItem, QStandardItemModel
+from PySide6.QtUiTools import QUiLoader
+from PySide6.QtWidgets import QDialog, QHeaderView, QMenu, QMessageBox, QVBoxLayout
 from sqlalchemy import delete, func, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, joinedload, lazyload
 
 from models import Order, Product, Product_tovar, Stock, User
 
@@ -142,3 +148,96 @@ def delete_order(database, order_id):
         result = db.execute(delete(Order).where(Order.id == order_id))
         if result.rowcount != 1:
             raise OrderError('Заказ уже удалён.')
+
+
+class Orders(QDialog):
+    def __init__(self, database, user, parent=None):
+        super().__init__(parent)
+        self.database = database
+        self.user = user
+        self.changed = False
+
+        self.ui = QUiLoader().load(str(Path(__file__).with_name('orders.ui')), self)
+        self.setWindowTitle(self.ui.windowTitle())
+        self.resize(self.ui.size())
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.ui)
+        self.ui.btnBack.clicked.connect(self.reject)
+        self.ui.btnAddOrder.setProperty('primary', True)
+        self.ui.btnAddOrder.clicked.connect(self.add_order)
+
+        self.model = QStandardItemModel(self)
+        self.model.setHorizontalHeaderLabels(['ID', 'Дата', 'ФИО клиента'])
+        self.table = self.ui.tblOrders
+        self.table.setModel(self.model)
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+
+        self.remove_action = QAction('Удалить заказ', self.table)
+        self.remove_action.setShortcut(QKeySequence('Delete'))
+        self.remove_action.setShortcutContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.remove_action.triggered.connect(self.remove_order)
+        self.table.addAction(self.remove_action)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self.show_order_menu)
+        self.load_orders()
+
+    def load_orders(self):
+        try:
+            with Session(self.database) as db:
+                orders = (db.query(Order).options(lazyload('*'), joinedload(Order.user))
+                          .order_by(Order.order_date.desc(), Order.id.desc()).all())
+        except SQLAlchemyError:
+            QMessageBox.warning(self, 'Заказы', 'Не удалось загрузить список заказов.')
+            return
+
+        self.model.removeRows(0, self.model.rowCount())
+        for order in orders:
+            id_item = QStandardItem(str(order.id))
+            id_item.setData(order)
+            self.model.appendRow([
+                id_item, QStandardItem(order.order_date.strftime('%d.%m.%Y')), QStandardItem(str(order.user)),
+            ])
+
+    def add_order(self):
+        from order_dialogs import NewOrderDialog
+
+        try:
+            dialog = NewOrderDialog(self.database, self.user, self)
+        except SQLAlchemyError:
+            QMessageBox.warning(self, 'Заказы', 'Не удалось загрузить клиентов и товары.')
+            return
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        dialog.deleteLater()
+        if accepted:
+            self.changed = True
+            self.load_orders()
+
+    def show_order_menu(self, point):
+        index = self.table.indexAt(point)
+        if index.isValid():
+            self.table.selectRow(index.row())
+            menu = QMenu()
+            menu.addAction(self.remove_action)
+            menu.exec(self.table.viewport().mapToGlobal(point))
+
+    def remove_order(self):
+        rows = self.table.selectionModel().selectedRows()
+        if not rows:
+            return
+        order_id = self.model.itemFromIndex(rows[0]).data().id
+        answer = QMessageBox.question(self, 'Удаление заказа', f'Удалить заказ №{order_id} и вернуть пары на склад?',
+                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                                      QMessageBox.StandardButton.No)
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            delete_order(self.database, order_id)
+        except OrderError as error:
+            self.load_orders()
+            QMessageBox.warning(self, 'Заказы', str(error))
+        except SQLAlchemyError:
+            QMessageBox.warning(self, 'Заказы', 'Не удалось удалить заказ.')
+        else:
+            self.changed = True
+            self.load_orders()

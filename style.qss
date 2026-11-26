@@ -18,7 +18,7 @@ QWidget#productCard[lowStock="true"] {
     background-color: #FF8080;
 }
 
-QListWidget, QListView#listOrder, QTableWidget, QScrollArea {
+QListWidget, QListView#listOrder, QTableWidget, QTableView#tblOrders, QScrollArea {
     background-color: #FFFFFF;
     border: 1px solid #9AB4AD;
     selection-background-color: #70B2AF;

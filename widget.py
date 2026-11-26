@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from auth import can_manage_orders, is_customer
 from models import engine, Product, Cathegory, Subcathegory, DatabaseConfigError, ENV_FILE, config_error
-from order_dialogs import CartDialog, Info, LoginDialog, OrdersDialog
-from orders import add_to_cart, get_prices
+from order_dialogs import CartDialog, Info, LoginDialog
+from orders import Orders, add_to_cart, get_prices
 from tovar import BASE_DIR, Tovar
 
 IMPORT_DIR = BASE_DIR / 'import'
@@ -188,7 +188,7 @@ class Widget(QWidget):
     def open_orders(self):
         if not can_manage_orders(self.user):
             return
-        dialog = OrdersDialog(engine, self.user, self)
+        dialog = Orders(engine, self.user, self)
         dialog.exec()
         if dialog.changed:
             self.load_tovars()
